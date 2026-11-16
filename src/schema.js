@@ -14,11 +14,14 @@ export const CATEGORIES = [
 export const PRIORITIES = ["High", "Medium", "Low"];
 export const STATUSES = ["New", "Closed Not Needed", "Expanding", "Future", "In Work", "Maintain", "Complete"];
 export const RISKS = ["Green", "Yellow", "Red"];
+export const SEGMENTS = ["MRO", "Parts Distribution", "Workforce Management", "Engineering", "ERP", "IT / Infrastructure", "Corporate / Shared Services", "Cross-Functional"];
+export const WORK_NEW = ["W", "N"];
 
 // type: text | longtext | email | date | number | money | select
 // source: "submitter" = visible on the public form; "admin" = hidden, admin-edited only.
 export const FIELDS = [
   { key: "projectId", label: "Project ID", type: "number", source: "system", readOnly: true },
+  { key: "legacyId", label: "Legacy ID", type: "text", source: "admin" },
   { key: "requestDate", label: "Request Date", type: "date", source: "submitter", required: true },
   { key: "projectName", label: "Project Name", type: "text", source: "submitter", required: true },
   { key: "executiveSponsor", label: "Executive Sponsor", type: "text", source: "submitter", required: true },
@@ -29,6 +32,10 @@ export const FIELDS = [
   { key: "estimatedAnnualBenefit", label: "Estimated Annual $ Benefit or Savings", type: "money", source: "submitter", required: true },
   { key: "priority", label: "Priority", type: "select", options: PRIORITIES, source: "admin" },
   { key: "status", label: "Status", type: "select", options: STATUSES, source: "admin" },
+  { key: "businessSegment", label: "Business Segment", type: "select", options: SEGMENTS, source: "admin" },
+  { key: "workNew", label: "W/N", type: "select", options: WORK_NEW, source: "admin" },
+  { key: "internalSupport", label: "Internal Support", type: "text", source: "admin" },
+  { key: "externalSupport", label: "External Support", type: "text", source: "admin" },
   { key: "approvedTotalBudget", label: "Approved Total Budget ($)", type: "money", source: "admin" },
   { key: "costToDateSoftwareHardware", label: "Cost incurred to date (Software/Hardware)", type: "money", source: "admin" },
   { key: "costToDateExternal", label: "Cost incurred to date (External)", type: "money", source: "admin" },
@@ -38,6 +45,7 @@ export const FIELDS = [
   { key: "estCtcSoftware", label: "Est. CTC Software ($)", type: "money", source: "admin" },
   { key: "estCocConsulting", label: "Est. CoC Consulting ($)", type: "money", source: "admin" },
   { key: "estCocInternal", label: "Est. CoC Internal ($)", type: "money", source: "admin" },
+  { key: "totalEstCostToComplete", label: "Total Est. Cost to Complete ($)", type: "money", source: "admin" },
   { key: "estHoursRemainingExternal", label: "Est. Hours Remaining (External)", type: "number", source: "admin" },
   { key: "estHoursRemainingInternal", label: "Est. Hours Remaining (Internal)", type: "number", source: "admin" },
   { key: "totalEstCostAtCompletion", label: "Total Est. Cost at Completion ($)", type: "money", source: "admin" },

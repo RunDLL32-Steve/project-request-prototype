@@ -58,14 +58,15 @@
     const PAGE_SIZES = [25, 50, 75, 100];
 
     // Columns shown in the compact table (everything else lives in the detail panel).
-    const COMPACT = ["projectId", "projectName", "executiveSponsor", "projectCategory", "priority", "status",
+    const COMPACT = ["projectId", "legacyId", "projectName", "executiveSponsor", "projectCategory", "priority", "status",
       "approvedTotalBudget", "totalCostToDate", "budgetVariance", "estCompletionDate", "riskToCompletionDate"];
 
     // Detail panel sections.
     const SECTIONS = [
-      ["Request", ["projectName", "requestDate", "executiveSponsor", "sponsorEmail", "projectCategory", "estimatedAnnualBenefit", "businessReason", "expectedBenefit", "submittedAt"]],
-      ["Tracking", ["priority", "status", "riskToCompletionDate", "startDate", "estCompletionDate", "originalTargetCompletion"]],
-      ["Budget and cost", ["approvedTotalBudget", "costToDateSoftwareHardware", "costToDateExternal", "costToDateInternal", "totalCostToDate", "estCtcSoftware", "estCocConsulting", "estCocInternal", "totalEstCostAtCompletion", "budgetVariance"]],
+      ["Request", ["legacyId", "projectName", "requestDate", "executiveSponsor", "sponsorEmail", "projectCategory", "estimatedAnnualBenefit", "businessReason", "expectedBenefit", "submittedAt"]],
+      ["Tracking", ["priority", "status", "workNew", "businessSegment", "riskToCompletionDate", "startDate", "estCompletionDate", "originalTargetCompletion"]],
+      ["Budget and cost", ["approvedTotalBudget", "costToDateSoftwareHardware", "costToDateExternal", "costToDateInternal", "totalCostToDate", "estCtcSoftware", "estCocConsulting", "estCocInternal", "totalEstCostToComplete", "totalEstCostAtCompletion", "budgetVariance"]],
+      ["Support", ["internalSupport", "externalSupport"]],
       ["Hours", ["hoursToDateInternal", "estHoursRemainingExternal", "estHoursRemainingInternal"]],
       ["Status and risks", ["overallStatus", "keyRisksIssues"]],
     ];

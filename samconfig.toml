@@ -19,3 +19,24 @@ SmtpUser = "otp-notifications@sts-aviation-group.awsapps.com"
 
 [default.global.parameters]
 region = "us-east-1"
+
+# Production (AWS account 461280016391). Deploy with:  sam deploy --config-env prod --profile AIChatbotProd
+[prod.deploy.parameters]
+stack_name = "project-request-prod"
+region = "us-east-1"
+resolve_s3 = true
+capabilities = ["CAPABILITY_IAM"]
+confirm_changeset = true
+fail_on_empty_changeset = false
+
+[prod.deploy.parameters.parameter_overrides]
+Environment = "prod"
+EntraTenantId = "7ec87db3-4ff5-4619-96cb-54bef39d118e"
+EntraClientId = "2f14b2f4-bd9d-44d2-877a-701a44d4f735"
+NotifyTransport = "smtp"
+NotifyTestMode = "false"
+NotifyTestRecipient = "steven.millard@stsaviationgroup.com"
+NotifyTo = "steven.millard@stsaviationgroup.com"
+SmtpHost = "smtp.mail.us-east-1.awsapps.com"
+SmtpUser = "otp-notifications@sts-aviation-group.awsapps.com"
+LambdaSecretsArn = "arn:aws:secretsmanager:us-east-1:461280016391:secret:sts-exec-budget-forecast/prod/lambda-secrets-PgHa9s"
