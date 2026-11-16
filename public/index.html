@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Technology Request</title>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="top">
+    <strong>STS Technology Request</strong>
+    <div class="top-right">
+      <a href="/admin" id="adminLink" hidden>Admin</a>
+      <button type="button" id="themeToggle" class="theme-toggle" aria-label="Toggle light/dark mode"></button>
+    </div>
+  </header>
+  <main class="wrap">
+    <div class="card">
+      <p class="intro">Use this form for any new Technology Project request form from Managers and Executives to request a new Vendor supplied IT Software System to evaluate, Custom Software enhancements, a brand-new Custom Software Development system to build from scratch, Integration between existing systems, Process Automation, or Data Analytics reporting request :</p>
+      <form id="form" novalidate></form>
+      <div id="msg" role="status"></div>
+    </div>
+  </main>
+  <script type="module">
+    import { initAuth, api } from "/common.js";
+    import { dateField } from "/datepicker.js";
+    const form = document.getElementById("form");
+    const msg = document.getElementById("msg");
+    const show = (text, kind) => { msg.className = "msg " + kind; msg.textContent = text; };
+
+    try {
+      await initAuth();
+      const [{ fields }, me] = await Promise.all([api("/api/schema"), api("/api/me")]);
+      if (me.isAdmin) document.getElementById("adminLink").hidden = false;
+      const today = new Date().toISOString().slice(0, 10);
+
+      for (const f of fields.filter((f) => f.source === "submitter")) {
+        const label = document.createElement("label");
+        label.htmlFor = f.key;
+        label.textContent = f.label;
+        if (f.required) label.classList.add("req");
+        let el;
+        if (f.type === "select") {
+          el = document.createElement("select");
+          el.append(new Option("Select…", ""), ...f.options.map((o) => new Option(o, o)));
+        } else if (f.type === "longtext") {
+          el = document.createElement("textarea");
+        } else {
+          el = document.createElement("input");
+          el.type = f.type === "money" ? "number" : f.type === "date" ? "date" : f.type === "email" ? "email" : "text";
+          if (f.type === "money") { el.min = "0"; el.step = "0.01"; }
+        }
+        el.id = el.name = f.key;
+        el.required = !!f.required;
+        if (f.key === "requestDate") el.value = today;
+        if (f.key === "executiveSponsor") { el.value = me.name; el.readOnly = true; }
+        if (f.key === "sponsorEmail") { el.value = me.email; el.readOnly = true; }
+        form.append(label, f.type === "date" ? dateField(el) : el);
+      }
+      const btn = document.createElement("button");
+      btn.type = "submit"; btn.textContent = "Submit Request"; btn.style.marginTop = "18px";
+      form.append(btn);
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!form.reportValidity()) return;
+        btn.disabled = true;
+        try {
+          const body = Object.fromEntries(new FormData(form));
+          const r = await api("/api/requests", { method: "POST", body });
+          show(`Thank you — your request was submitted as Project ID ${r.projectId}.`, "ok");
+          form.reset();
+          form.requestDate.value = today;
+          form.executiveSponsor.value = me.name;
+          form.sponsorEmail.value = me.email;
+        } catch (err) {
+          show(err.message, "err");
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    } catch (err) {
+      show(err.message, "err");
+    }
+  </script>
+</body>
+</html>

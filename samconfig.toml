@@ -1,0 +1,21 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "project-request-nonprod"
+resolve_s3 = true
+capabilities = ["CAPABILITY_IAM"]
+confirm_changeset = false
+fail_on_empty_changeset = false
+
+[default.deploy.parameters.parameter_overrides]
+Environment = "nonprod"
+EntraTenantId = "7ec87db3-4ff5-4619-96cb-54bef39d118e"
+EntraClientId = "2f14b2f4-bd9d-44d2-877a-701a44d4f735"
+NotifyTransport = "smtp"
+NotifyTestMode = "true"
+NotifyTestRecipient = "steven.millard@stsaviationgroup.com"
+SmtpHost = "smtp.mail.us-east-1.awsapps.com"
+SmtpUser = "otp-notifications@sts-aviation-group.awsapps.com"
+
+[default.global.parameters]
+region = "us-east-1"

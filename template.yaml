@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: STS Technology Project Request form + admin table (Lambda + HTTP API + DynamoDB)
+
+Parameters:
+  Environment: { Type: String, Default: nonprod, AllowedValues: [nonprod, prod] }
+  EntraTenantId: { Type: String }
+  EntraClientId: { Type: String }
+  NotifyTo: { Type: String, Default: steven.millard@stsaviationgroup.com }
+  NotifyTransport: { Type: String, Default: smtp, AllowedValues: [none, smtp] }
+  # Safety rail: while "true", every notification goes ONLY to NotifyTestRecipient. Leave true outside prod.
+  NotifyTestMode: { Type: String, Default: "true", AllowedValues: ["true", "false"] }
+  NotifyTestRecipient: { Type: String, Default: steven.millard@stsaviationgroup.com }
+  SmtpHost: { Type: String, Default: smtp.mail.us-east-1.awsapps.com }
+  SmtpUser: { Type: String, Default: otp-notifications@sts-aviation-group.awsapps.com }
+  # Secret holding WORKMAIL_PASSWORD (the WorkMail personal access token). Currently the forecast
+  # app's nonprod secret, shared by decision. The password is read at runtime, never passed here.
+  LambdaSecretsArn:
+    Type: String
+    Default: arn:aws:secretsmanager:us-east-1:086379259288:secret:sts-exec-budget-forecast/nonprod/lambda-secrets-PYGqlF
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Timeout: 30
+    MemorySize: 512
+
+Resources:
+  RequestsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: projectId, AttributeType: N }
+      KeySchema:
+        - { AttributeName: projectId, KeyType: HASH }
+      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true }
+      SSESpecification: { SSEEnabled: true }
+
+  # One item per admin user (partition key userId) holding that admin's saved preferences,
+  # e.g. their admin-table column order.
+  UserPrefsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: userId, AttributeType: S }
+      KeySchema:
+        - { AttributeName: userId, KeyType: HASH }
+      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true }
+      SSESpecification: { SSEEnabled: true }
+
+  AppFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src/lambda.handler
+      Environment:
+        Variables:
+          NODE_ENV: production
+          APP_ENV: !Ref Environment
+          DDB_TABLE: !Ref RequestsTable
+          PREFS_TABLE: !Ref UserPrefsTable
+          ENTRA_TENANT_ID: !Ref EntraTenantId
+          ENTRA_CLIENT_ID: !Ref EntraClientId
+          NOTIFY_TO: !Ref NotifyTo
+          NOTIFY_TRANSPORT: !Ref NotifyTransport
+          NOTIFY_FROM: !Ref SmtpUser
+          NOTIFY_FROM_NAME: STS Technology Project Request
+          NOTIFY_TEST_MODE: !Ref NotifyTestMode
+          NOTIFY_TEST_RECIPIENT: !Ref NotifyTestRecipient
+          SMTP_HOST: !Ref SmtpHost
+          SMTP_PORT: "465"
+          SMTP_USER: !Ref SmtpUser
+          LAMBDA_SECRETS_ARN: !Ref LambdaSecretsArn
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref RequestsTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref UserPrefsTable }
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref LambdaSecretsArn
+      Events:
+        Any:
+          Type: HttpApi
+          Properties: { Path: "/{proxy+}", Method: ANY }
+        Root:
+          Type: HttpApi
+          Properties: { Path: /, Method: GET }
+
+  WebDistribution:
+    Type: AWS::CloudFront::Distribution
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DistributionConfig:
+        Comment: !Sub "STS Technology Project Request - ${Environment} (CloudFront -> API Gateway -> Lambda)"
+        Enabled: true
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: api-gw
+            DomainName: !Sub "${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+              OriginReadTimeout: 30
+              OriginKeepaliveTimeout: 5
+        DefaultCacheBehavior:
+          TargetOriginId: api-gw
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [HEAD, DELETE, POST, GET, OPTIONS, PUT, PATCH]
+          CachedMethods: [HEAD, GET]
+          Compress: true
+          # Managed CachingDisabled: pages and API always come fresh from the Lambda.
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          # Managed AllViewerExceptHostHeader: forwards Authorization, query strings, cookies.
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+        Restrictions:
+          GeoRestriction:
+            RestrictionType: none
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+
+Outputs:
+  AppUrl:
+    Description: Public URL (CloudFront). Use this for the Entra redirect URIs.
+    Value: !Sub "https://${WebDistribution.DomainName}/"
+  DistributionId:
+    Value: !Ref WebDistribution
+  ApiUrl:
+    Description: Raw API Gateway URL (origin, not the public address)
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
+  TableName:
+    Value: !Ref RequestsTable
+  UserPrefsTableName:
+    Value: !Ref UserPrefsTable
