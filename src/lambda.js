@@ -12,23 +12,45 @@ import { createStore } from "./store.js";
 import { createMailer } from "./mailer.js";
 
 const mailer = createMailer(config);
-const http = serverless(createApp({ config, store: createStore(config), mailer }));
+const http = serverless(
+    createApp({ config, store: createStore(config), mailer }),
+);
 
 async function runSelfTest(event) {
-  const base = { transport: config.notifyTransport, testMode: config.notifyTestMode, from: config.notifyFrom || config.smtpUser };
-  try {
-    const result = event.selfTest === "verify" ? await mailer.verify() : await mailer.sendTest();
-    return { ok: true, mode: event.selfTest === "verify" ? "verify" : "send", ...base, result };
-  } catch (e) {
-    // Never include credentials in the output; the error code + message are enough to diagnose.
-    return { ok: false, ...base, error: `${e.code || "ERROR"}: ${e.message}` };
-  }
+    const base = {
+        transport: config.notifyTransport,
+        testMode: config.notifyTestMode,
+        from: config.notifyFrom || config.smtpUser,
+    };
+    try {
+        const result =
+            event.selfTest === "verify"
+                ? await mailer.verify()
+                : await mailer.sendTest();
+        return {
+            ok: true,
+            mode: event.selfTest === "verify" ? "verify" : "send",
+            ...base,
+            result,
+        };
+    } catch (e) {
+        // Never include credentials in the output; the error code + message are enough to diagnose.
+        return {
+            ok: false,
+            ...base,
+            error: `${e.code || "ERROR"}: ${e.message}`,
+        };
+    }
 }
 
 export const handler = async (event, context) => {
-  // API Gateway events always carry requestContext, so a web request can never trigger the self-test.
-  if (event && !event.requestContext && Object.prototype.hasOwnProperty.call(event, "selfTest")) {
-    return runSelfTest(event);
-  }
-  return http(event, context);
+    // API Gateway events always carry requestContext, so a web request can never trigger the self-test.
+    if (
+        event &&
+        !event.requestContext &&
+        Object.prototype.hasOwnProperty.call(event, "selfTest")
+    ) {
+        return runSelfTest(event);
+    }
+    return http(event, context);
 };

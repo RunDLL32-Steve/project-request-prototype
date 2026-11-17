@@ -1,703 +1,1145 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Technology Requests Admin</title>
-  <script src="/theme.js"></script>
-  <link rel="stylesheet" href="/styles.css">
-</head>
-<body>
-  <header class="top">
-    <strong>Technology Requests — Admin</strong>
-    <div class="top-right">
-      <a href="/">Request form</a>
-      <button type="button" id="themeToggle" class="theme-toggle" aria-label="Toggle light/dark mode"></button>
-    </div>
-  </header>
-  <main class="admin-wrap">
-    <div class="toolbar">
-      <input id="search" type="search" placeholder="Filter rows…" aria-label="Filter rows">
-      <button type="button" id="filtersBtn" class="btn-secondary" aria-expanded="false" aria-controls="filterPanel">Filters</button>
-      <span class="saved-wrap">
-        <button type="button" id="savedBtn" class="btn-secondary" aria-expanded="false" aria-haspopup="true" aria-controls="savedPop">Saved filters</button>
-        <div id="savedPop" class="saved-pop" hidden></div>
-      </span>
-      <button type="button" id="clearBtn" class="btn-link" hidden>Clear all</button>
-      <label class="toggle"><input type="checkbox" id="allCols"> All columns</label>
-      <button type="button" id="resetColsBtn" class="btn-link" hidden>Reset column order</button>
-      <span class="count" id="count"></span>
-      <span id="saveState">Search and filters cover every record. Changes save automatically; click a Project ID to open all fields.</span>
-    </div>
-    <section id="filterPanel" class="filter-panel" hidden aria-label="Filters"></section>
-    <div id="error" class="msg err" hidden></div>
-    <div class="grid-scroll"><table class="grid" id="grid"></table></div>
-    <nav id="pager" class="pager" aria-label="Pagination"></nav>
-  </main>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Technology Requests Admin</title>
+        <script src="/theme.js"></script>
+        <link rel="stylesheet" href="/styles.css" />
+    </head>
+    <body>
+        <header class="top">
+            <strong>Technology Requests — Admin</strong>
+            <div class="top-right">
+                <a href="/">Request form</a>
+                <button
+                    type="button"
+                    id="themeToggle"
+                    class="theme-toggle"
+                    aria-label="Toggle light/dark mode"
+                ></button>
+            </div>
+        </header>
+        <main class="admin-wrap">
+            <div class="toolbar">
+                <input
+                    id="search"
+                    type="search"
+                    placeholder="Filter rows…"
+                    aria-label="Filter rows"
+                />
+                <button
+                    type="button"
+                    id="filtersBtn"
+                    class="btn-secondary"
+                    aria-expanded="false"
+                    aria-controls="filterPanel"
+                >
+                    Filters
+                </button>
+                <span class="saved-wrap">
+                    <button
+                        type="button"
+                        id="savedFiltersButton"
+                        class="btn-secondary"
+                        aria-expanded="false"
+                        aria-haspopup="true"
+                        aria-controls="savedFiltersPopup"
+                    >
+                        Saved filters
+                    </button>
+                    <div
+                        id="savedFiltersPopup"
+                        class="saved-filters-popup"
+                        hidden
+                    ></div>
+                </span>
+                <button type="button" id="clearBtn" class="btn-link" hidden>
+                    Clear all
+                </button>
+                <label class="toggle"
+                    ><input type="checkbox" id="allCols" /> All columns</label
+                >
+                <button type="button" id="resetColsBtn" class="btn-link" hidden>
+                    Reset column order
+                </button>
+                <span class="count" id="count"></span>
+                <span id="saveState"
+                    >Search and filters cover every record. Changes save
+                    automatically; click a Project ID to open all fields.</span
+                >
+            </div>
+            <section
+                id="filterPanel"
+                class="filter-panel"
+                hidden
+                aria-label="Filters"
+            ></section>
+            <div id="error" class="msg err" hidden></div>
+            <div class="grid-scroll">
+                <table class="grid" id="grid"></table>
+            </div>
+            <nav id="pager" class="pager" aria-label="Pagination"></nav>
+        </main>
 
-  <div id="overlay" class="overlay" hidden></div>
-  <aside id="drawer" class="drawer" hidden role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
-    <div class="drawer-head">
-      <h2 id="drawerTitle"></h2>
-      <button type="button" id="drawerClose" class="icon-btn" aria-label="Close">&times;</button>
-    </div>
-    <div id="drawerBody" class="drawer-body"></div>
-  </aside>
+        <div id="overlay" class="overlay" hidden></div>
+        <aside
+            id="drawer"
+            class="drawer"
+            hidden
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="drawerTitle"
+        >
+            <div class="drawer-head">
+                <h2 id="drawerTitle"></h2>
+                <button
+                    type="button"
+                    id="drawerClose"
+                    class="icon-btn"
+                    aria-label="Close"
+                >
+                    &times;
+                </button>
+            </div>
+            <div id="drawerBody" class="drawer-body"></div>
+        </aside>
 
-  <script type="module">
-    import { initAuth, api } from "/common.js";
-    import { dateField } from "/datepicker.js";
+        <script type="module">
+            import { initAuth, api } from "/common.js";
+            import { dateField } from "/datepicker.js";
 
-    const grid = document.getElementById("grid");
-    const errBox = document.getElementById("error");
-    const drawer = document.getElementById("drawer");
-    const overlay = document.getElementById("overlay");
-    const search = document.getElementById("search");
-    const filtersBtn = document.getElementById("filtersBtn");
-    const clearBtn = document.getElementById("clearBtn");
-    const filterPanel = document.getElementById("filterPanel");
-    const savedBtn = document.getElementById("savedBtn");
-    const savedPop = document.getElementById("savedPop");
-    const pager = document.getElementById("pager");
-    const allCols = document.getElementById("allCols");
-    const resetColsBtn = document.getElementById("resetColsBtn");
-    const PAGE_SIZES = [25, 50, 75, 100];
+            const grid = document.getElementById("grid");
+            const errBox = document.getElementById("error");
+            const drawer = document.getElementById("drawer");
+            const overlay = document.getElementById("overlay");
+            const search = document.getElementById("search");
+            const filtersBtn = document.getElementById("filtersBtn");
+            const clearBtn = document.getElementById("clearBtn");
+            const filterPanel = document.getElementById("filterPanel");
+            const savedFiltersButton =
+                document.getElementById("savedFiltersButton");
+            const savedFiltersPopup =
+                document.getElementById("savedFiltersPopup");
+            const pager = document.getElementById("pager");
+            const allCols = document.getElementById("allCols");
+            const resetColsBtn = document.getElementById("resetColsBtn");
+            const PAGE_SIZES = [25, 50, 75, 100];
 
-    // Columns shown in the compact table (everything else lives in the detail panel).
-    const COMPACT = ["projectId", "legacyId", "projectName", "executiveSponsor", "projectCategory", "priority", "status",
-      "approvedTotalBudget", "totalCostToDate", "budgetVariance", "estCompletionDate", "riskToCompletionDate"];
+            // Columns shown in the compact table (everything else lives in the detail panel).
+            const COMPACT = [
+                "projectId",
+                "legacyId",
+                "projectName",
+                "executiveSponsor",
+                "projectCategory",
+                "priority",
+                "status",
+                "approvedTotalBudget",
+                "totalCostToDate",
+                "budgetVariance",
+                "estCompletionDate",
+                "riskToCompletionDate",
+            ];
 
-    // Detail panel sections.
-    const SECTIONS = [
-      ["Request", ["legacyId", "projectName", "requestDate", "executiveSponsor", "sponsorEmail", "projectCategory", "estimatedAnnualBenefit", "businessReason", "expectedBenefit", "submittedAt"]],
-      ["Tracking", ["priority", "status", "workNew", "businessSegment", "riskToCompletionDate", "startDate", "estCompletionDate", "originalTargetCompletion"]],
-      ["Budget and cost", ["approvedTotalBudget", "costToDateSoftwareHardware", "costToDateExternal", "costToDateInternal", "totalCostToDate", "estCtcSoftware", "estCocConsulting", "estCocInternal", "totalEstCostToComplete", "totalEstCostAtCompletion", "budgetVariance"]],
-      ["Support", ["internalSupport", "externalSupport"]],
-      ["Hours", ["hoursToDateInternal", "estHoursRemainingExternal", "estHoursRemainingInternal"]],
-      ["Status and risks", ["overallStatus", "keyRisksIssues"]],
-    ];
+            // Detail panel sections.
+            const SECTIONS = [
+                [
+                    "Request",
+                    [
+                        "legacyId",
+                        "projectName",
+                        "requestDate",
+                        "executiveSponsor",
+                        "sponsorEmail",
+                        "projectCategory",
+                        "estimatedAnnualBenefit",
+                        "businessReason",
+                        "expectedBenefit",
+                        "submittedAt",
+                    ],
+                ],
+                [
+                    "Tracking",
+                    [
+                        "priority",
+                        "status",
+                        "workNew",
+                        "businessSegment",
+                        "riskToCompletionDate",
+                        "startDate",
+                        "estCompletionDate",
+                        "originalTargetCompletion",
+                    ],
+                ],
+                [
+                    "Budget and cost",
+                    [
+                        "approvedTotalBudget",
+                        "costToDateSoftwareHardware",
+                        "costToDateExternal",
+                        "costToDateInternal",
+                        "totalCostToDate",
+                        "estCtcSoftware",
+                        "estCocConsulting",
+                        "estCocInternal",
+                        "totalEstCostToComplete",
+                        "totalEstCostAtCompletion",
+                        "budgetVariance",
+                    ],
+                ],
+                ["Support", ["internalSupport", "externalSupport"]],
+                [
+                    "Hours",
+                    [
+                        "hoursToDateInternal",
+                        "estHoursRemainingExternal",
+                        "estHoursRemainingInternal",
+                    ],
+                ],
+                ["Status and risks", ["overallStatus", "keyRisksIssues"]],
+            ];
 
-    let fields = [], byKey = {}, rows = [], sortKey = "projectId", sortDir = 1, openId = null;
-    let filters = {}; // key -> { text } | { in: [values] } | { from, to }
-    let savedFilters = []; // this admin's saved views: [{ id, name, filters, search }]
-    let syncSaveBtn = () => {};
-    let resetters = []; // one reset() per multi-select widget, called by clearAll()
-    let order = [];   // field keys in the admin's preferred column order (saved per admin)
-    let defaultOrder = [];
-    let dragKey = null;
-    let page = 1, pageSize = 25;
-    try { const s = Number(localStorage.getItem("pageSize")); if (PAGE_SIZES.includes(s)) pageSize = s; } catch {}
+            let fields = [],
+                byKey = {},
+                rows = [],
+                sortKey = "projectId",
+                sortDir = 1,
+                openId = null;
+            let filters = {}; // key -> { text } | { in: [values] } | { from, to }
+            let savedFilters = []; // this admin's saved views: [{ id, name, filters, search }]
+            let updateSaveButtonState = () => {};
+            let multiSelectClearers = []; // one clearSelection() per multi-select, called by clearAll()
+            let order = []; // field keys in the admin's preferred column order (saved per admin)
+            let defaultOrder = [];
+            let dragKey = null;
+            let page = 1,
+                pageSize = 25;
+            try {
+                const s = Number(localStorage.getItem("pageSize"));
+                if (PAGE_SIZES.includes(s)) pageSize = s;
+            } catch {}
 
-    const fail = (t) => { errBox.hidden = false; errBox.textContent = t; };
-    const clearFail = () => { errBox.hidden = true; };
-    const isNum = (f) => f.type === "money" || f.type === "number";
+            const fail = (t) => {
+                errBox.hidden = false;
+                errBox.textContent = t;
+            };
+            const clearFail = () => {
+                errBox.hidden = true;
+            };
+            const isNum = (f) => f.type === "money" || f.type === "number";
 
-    function makeInput(f, value) {
-      let el;
-      if (f.type === "select") {
-        el = document.createElement("select");
-        el.append(new Option("", ""), ...f.options.map((o) => new Option(o, o)));
-      } else if (f.type === "longtext") {
-        el = document.createElement("textarea");
-      } else {
-        el = document.createElement("input");
-        el.type = f.type === "date" ? "date" : f.type === "email" ? "email" : f.type === "text" ? "text" : "number";
-        if (f.type === "money") el.step = "0.01";
-      }
-      el.value = value ?? "";
-      if (f.readOnly) { el.readOnly = true; el.disabled = true; }
-      return el;
-    }
-
-    /** Save one field; `mark` is the element that flashes (table cell or drawer field). */
-    async function saveField(row, f, el, mark) {
-      const original = row[f.key] ?? "";
-      if (String(el.value) === String(original)) return;
-      mark.classList.remove("saved", "error");
-      mark.classList.add("saving");
-      try {
-        const { row: updated } = await api(`/api/admin/requests/${row.projectId}`, { method: "PATCH", body: { [f.key]: el.value } });
-        Object.assign(row, updated);
-        el.value = row[f.key] ?? "";
-        mark.classList.replace("saving", "saved");
-        mark.title = "";
-        clearFail();
-        setTimeout(() => mark.classList.remove("saved"), 1200);
-      } catch (e) {
-        mark.classList.replace("saving", "error");
-        mark.title = e.message;
-        el.value = original;
-        fail(`Project ${row.projectId} – ${f.label}: ${e.message}`);
-      }
-    }
-
-    // ---- Filtering (runs over ALL rows, before pagination) ----
-    function setFilter(key, patch) {
-      const next = { ...(filters[key] || {}), ...patch };
-      for (const k of Object.keys(next)) if (next[k] === "" || next[k] === undefined) delete next[k];
-      if (Array.isArray(next.in) && !next.in.length) delete next.in;
-      if (Object.keys(next).length) filters[key] = next; else delete filters[key];
-      page = 1;
-      render();
-    }
-
-    function matches(row, q) {
-      if (q && !Object.values(row).some((v) => String(v ?? "").toLowerCase().includes(q))) return false;
-      for (const [key, fv] of Object.entries(filters)) {
-        const f = byKey[key], v = row[key];
-        if (fv.text !== undefined) {
-          if (!String(v ?? "").toLowerCase().includes(fv.text.toLowerCase())) return false;
-        } else if (fv.in !== undefined) {
-          if (!fv.in.includes(String(v ?? ""))) return false;
-        } else {
-          if (v === null || v === undefined || v === "") return false;
-          const conv = (x) => (isNum(f) ? Number(x) : String(x));
-          if (fv.from !== undefined && conv(v) < conv(fv.from)) return false;
-          if (fv.to !== undefined && conv(v) > conv(fv.to)) return false;
-        }
-      }
-      return true;
-    }
-
-    // Multi-select dropdown: stays open while ticking, chips for picks, search box, picks are OR'd.
-    function closeAllPops() {
-      document.querySelectorAll(".msel-pop:not([hidden])").forEach((p) => {
-        p.hidden = true;
-        p.previousElementSibling.setAttribute("aria-expanded", "false");
-      });
-    }
-    document.addEventListener("click", (e) => { if (!e.target.closest(".msel")) closeAllPops(); });
-    filterPanel.addEventListener("scroll", closeAllPops);
-    window.addEventListener("resize", closeAllPops);
-    document.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      const open = document.querySelector(".msel-pop:not([hidden])");
-      if (!open) return;
-      const box = open.previousElementSibling;
-      closeAllPops();
-      box.focus();
-    });
-
-    function buildMultiSelect(f) {
-      const selected = new Set();
-      const wrap = document.createElement("div");
-      wrap.className = "msel";
-      const box = document.createElement("button");
-      box.type = "button";
-      box.className = "msel-box";
-      box.setAttribute("aria-haspopup", "listbox");
-      box.setAttribute("aria-expanded", "false");
-      const pop = document.createElement("div");
-      pop.className = "msel-pop";
-      pop.hidden = true;
-      const find = document.createElement("input");
-      find.type = "search";
-      find.placeholder = "Search…";
-      find.setAttribute("aria-label", "Search " + f.label);
-      const list = document.createElement("div");
-      list.className = "msel-list";
-      const none = document.createElement("div");
-      none.className = "msel-none";
-      none.textContent = "No matches";
-      none.hidden = true;
-      const items = f.options.map((o) => {
-        const label = document.createElement("label");
-        const cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.value = o;
-        const span = document.createElement("span");
-        span.textContent = o;
-        label.append(cb, span);
-        cb.addEventListener("change", () => {
-          if (cb.checked) selected.add(o); else selected.delete(o);
-          find.value = "";
-          applySearch();
-          update();
-        });
-        return { o, label, cb };
-      });
-      list.append(...items.map((i) => i.label), none);
-      find.addEventListener("input", applySearch);
-      pop.append(find, list);
-      wrap.append(box, pop);
-
-      function applySearch() {
-        const q = find.value.trim().toLowerCase();
-        let shown = 0;
-        for (const i of items) {
-          const hit = !q || i.o.toLowerCase().includes(q);
-          i.label.hidden = !hit;
-          if (hit) shown++;
-        }
-        none.hidden = shown > 0;
-      }
-      function update() {
-        paint();
-        setFilter(f.key, { in: [...selected] });
-      }
-      // Set the selection from saved state without touching `filters` (the caller owns that).
-      function set(values) {
-        selected.clear();
-        for (const o of f.options) if (values.includes(o)) selected.add(o);
-        items.forEach((i) => (i.cb.checked = selected.has(i.o)));
-        paint();
-      }
-      function paint() {
-        box.replaceChildren();
-        if (!selected.size) {
-          box.textContent = "Any";
-        } else {
-          for (const o of selected) {
-            const chip = document.createElement("span");
-            chip.className = "msel-chip";
-            chip.append(document.createTextNode(o + " "));
-            const x = document.createElement("span");
-            x.className = "msel-x";
-            x.textContent = "×";
-            x.setAttribute("aria-hidden", "true");
-            chip.append(x);
-            box.append(chip);
-          }
-        }
-        box.setAttribute("aria-label", f.label + ": " + (selected.size ? [...selected].join(", ") : "Any"));
-      }
-      function place() {
-        const r = box.getBoundingClientRect();
-        pop.style.left = r.left + "px";
-        pop.style.top = r.bottom + 2 + "px";
-        pop.style.minWidth = r.width + "px";
-      }
-      box.addEventListener("click", () => {
-        const opening = pop.hidden;
-        closeAllPops();
-        if (opening) {
-          pop.hidden = false;
-          box.setAttribute("aria-expanded", "true");
-          place();
-          find.focus();
-        }
-      });
-      function reset() {
-        selected.clear();
-        items.forEach((i) => (i.cb.checked = false));
-        find.value = "";
-        applySearch();
-        box.replaceChildren();
-        box.textContent = "Any";
-        box.setAttribute("aria-label", f.label + ": Any");
-        closeAllPops();
-      }
-      box.textContent = "Any";
-      box.setAttribute("aria-label", f.label + ": Any");
-      return { el: wrap, reset, set };
-    }
-
-    function buildFilterPanel() {
-      resetters = [];
-      filterPanel.replaceChildren();
-      const grid = document.createElement("div");
-      grid.className = "fgrid";
-      for (const f of fields) {
-        const wrap = document.createElement("div");
-        wrap.className = "ffield";
-        const label = document.createElement("label");
-        label.textContent = f.label;
-        wrap.append(label);
-        const mk = (type) => { const i = document.createElement("input"); i.type = type; return i; };
-        if (f.type === "select") {
-          const ms = buildMultiSelect(f);
-          ms.set((filters[f.key] || {}).in || []);
-          resetters.push(ms.reset);
-          wrap.append(ms.el);
-        } else if (f.type === "date" || isNum(f)) {
-          const range = document.createElement("div");
-          range.className = "frange";
-          for (const [part, ph] of [["from", "From"], ["to", "To"]]) {
-            const i = mk(f.type === "date" ? "date" : "number");
-            i.placeholder = ph;
-            i.setAttribute("aria-label", f.label + " " + ph.toLowerCase());
-            if (f.type === "money") i.step = "0.01";
-            i.value = (filters[f.key] || {})[part] || "";
-            i.addEventListener("input", () => setFilter(f.key, { [part]: i.value }));
-            range.append(f.type === "date" ? dateField(i) : i);
-          }
-          wrap.append(range);
-        } else {
-          const i = mk("text");
-          i.placeholder = "Contains…";
-          i.value = (filters[f.key] || {}).text || "";
-          i.addEventListener("input", () => setFilter(f.key, { text: i.value }));
-          wrap.append(i);
-        }
-        grid.append(wrap);
-      }
-      filterPanel.append(grid);
-    }
-
-    // ---- Saved filters (per user, for quick switching between views; never applied on load) ----
-    function hasActiveFilters() { return Object.keys(filters).length > 0 || search.value.trim() !== ""; }
-
-    function closeSaved() {
-      savedPop.hidden = true;
-      savedBtn.setAttribute("aria-expanded", "false");
-    }
-
-    function applySaved(sf) {
-      filters = JSON.parse(JSON.stringify(sf.filters || {}));
-      search.value = sf.search || "";
-      page = 1;
-      buildFilterPanel(); // controls are hydrated from `filters`
-      render();
-      closeSaved();
-    }
-
-    async function saveCurrent(nameInput) {
-      const name = nameInput.value.trim();
-      if (!name || !hasActiveFilters()) return;
-      const existing = savedFilters.find((s) => s.name.toLowerCase() === name.toLowerCase());
-      if (existing && !confirm('Replace the saved filter "' + existing.name + '"?')) return;
-      try {
-        const r = await api("/api/admin/saved-filters", { method: "POST", body: { name, filters, search: search.value.trim() } });
-        savedFilters = r.savedFilters;
-        document.getElementById("saveState").textContent = 'Saved filter "' + name + '".';
-        clearFail();
-        renderSaved();
-      } catch (e) {
-        fail("Could not save filter: " + e.message);
-      }
-    }
-
-    async function deleteSaved(sf) {
-      if (!confirm('Delete the saved filter "' + sf.name + '"?')) return;
-      try {
-        const r = await api("/api/admin/saved-filters/" + encodeURIComponent(sf.id), { method: "DELETE" });
-        savedFilters = r.savedFilters;
-        clearFail();
-        renderSaved();
-      } catch (e) {
-        fail("Could not delete filter: " + e.message);
-      }
-    }
-
-    function renderSaved() {
-      savedPop.replaceChildren();
-      const list = document.createElement("ul");
-      list.className = "saved-list";
-      if (!savedFilters.length) {
-        const li = document.createElement("li");
-        li.className = "saved-empty";
-        li.textContent = "No saved filters yet.";
-        list.append(li);
-      }
-      for (const sf of savedFilters) {
-        const li = document.createElement("li");
-        const apply = document.createElement("button");
-        apply.type = "button";
-        apply.className = "saved-apply";
-        apply.textContent = sf.name;
-        apply.addEventListener("click", () => applySaved(sf));
-        const del = document.createElement("button");
-        del.type = "button";
-        del.className = "saved-del";
-        del.textContent = "×";
-        del.setAttribute("aria-label", "Delete saved filter " + sf.name);
-        del.addEventListener("click", () => deleteSaved(sf));
-        li.append(apply, del);
-        list.append(li);
-      }
-      const form = document.createElement("form");
-      form.className = "saved-form";
-      const name = document.createElement("input");
-      name.type = "text";
-      name.maxLength = 60;
-      name.placeholder = "Name this view";
-      name.setAttribute("aria-label", "Name for the saved filter");
-      const save = document.createElement("button");
-      save.type = "submit";
-      save.textContent = "Save";
-      const sync = () => {
-        const ok = hasActiveFilters();
-        save.disabled = !ok || !name.value.trim();
-        save.title = !ok ? "Set a filter or search first" : !name.value.trim() ? "Enter a name for this view" : "";
-        name.title = ok ? "" : "Set a filter or search first";
-      };
-      syncSaveBtn = sync; // render() calls this so Save tracks filter changes while the popover is open
-      name.addEventListener("input", sync);
-      form.addEventListener("submit", (e) => { e.preventDefault(); saveCurrent(name); });
-      sync();
-      form.append(name, save);
-      savedPop.append(list, form);
-    }
-
-    savedBtn.addEventListener("click", () => {
-      const opening = savedPop.hidden;
-      if (opening) renderSaved();
-      savedPop.hidden = !opening;
-      savedBtn.setAttribute("aria-expanded", String(opening));
-    });
-    document.addEventListener("click", (e) => { if (!e.target.closest(".saved-wrap")) closeSaved(); });
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !savedPop.hidden) { closeSaved(); savedBtn.focus(); } });
-
-    function clearAll() {
-      filters = {};
-      search.value = "";
-      filterPanel.querySelectorAll("input:not([type=checkbox])").forEach((i) => (i.value = ""));
-      resetters.forEach((r) => r());
-      page = 1;
-      render();
-    }
-
-    // ---- Pagination ----
-    function renderPager(total, pages) {
-      pager.replaceChildren();
-      const size = document.createElement("label");
-      size.className = "pager-size";
-      size.append("Rows per page ");
-      const sel = document.createElement("select");
-      sel.append(...PAGE_SIZES.map((n) => new Option(n, n)));
-      sel.value = pageSize;
-      sel.onchange = () => {
-        pageSize = Number(sel.value);
-        try { localStorage.setItem("pageSize", String(pageSize)); } catch {}
-        page = 1;
-        render();
-      };
-      size.append(sel);
-
-      const from = total ? (page - 1) * pageSize + 1 : 0;
-      const to = Math.min(total, page * pageSize);
-      const info = document.createElement("span");
-      info.className = "pager-info";
-      info.textContent = "Showing " + from + "–" + to + " of " + total + (total !== rows.length ? " (filtered from " + rows.length + ")" : "");
-
-      const nav = document.createElement("div");
-      nav.className = "pager-nav";
-      const btn = (text, target, { disabled = false, current = false, label } = {}) => {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.textContent = text;
-        if (label) b.setAttribute("aria-label", label);
-        b.disabled = disabled;
-        if (current) { b.className = "cur"; b.setAttribute("aria-current", "page"); }
-        b.onclick = () => { page = target; render(); };
-        return b;
-      };
-      nav.append(btn("«", 1, { disabled: page === 1, label: "First page" }), btn("‹", page - 1, { disabled: page === 1, label: "Previous page" }));
-      // windowed page numbers: first, last, and 2 either side of the current page
-      const shown = new Set([1, pages]);
-      for (let i = page - 2; i <= page + 2; i++) if (i >= 1 && i <= pages) shown.add(i);
-      let prev = 0;
-      for (const n of [...shown].sort((a, b) => a - b)) {
-        if (n - prev > 1) { const gap = document.createElement("span"); gap.textContent = "…"; gap.className = "gap"; nav.append(gap); }
-        nav.append(btn(String(n), n, { current: n === page }));
-        prev = n;
-      }
-      nav.append(btn("›", page + 1, { disabled: page === pages, label: "Next page" }), btn("»", pages, { disabled: page === pages, label: "Last page" }));
-      pager.append(size, info, nav);
-    }
-
-    function render() {
-      const q = search.value.trim().toLowerCase();
-      const cols = order.filter((k) => allCols.checked || COMPACT.includes(k)).map((k) => byKey[k]);
-      resetColsBtn.hidden = order.join() === defaultOrder.join();
-      const view = rows.filter((r) => matches(r, q));
-      const activeCount = Object.keys(filters).length;
-      filtersBtn.textContent = activeCount ? "Filters (" + activeCount + ")" : "Filters";
-      clearBtn.hidden = !activeCount && !q;
-      syncSaveBtn();
-      view.sort((a, b) => {
-        const x = a[sortKey] ?? "", y = b[sortKey] ?? "";
-        return (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y))) * sortDir;
-      });
-      const total = view.length;
-      const pages = Math.max(1, Math.ceil(total / pageSize));
-      page = Math.min(Math.max(1, page), pages);
-      document.getElementById("count").textContent = total + " of " + rows.length + " requests";
-      renderPager(total, pages);
-      const pageRows = view.slice((page - 1) * pageSize, page * pageSize);
-
-      grid.replaceChildren();
-      grid.classList.toggle("compact", !allCols.checked);
-      const head = grid.createTHead().insertRow();
-      cols.forEach((f, i) => {
-        const th = document.createElement("th");
-        th.textContent = f.label + (sortKey === f.key ? (sortDir > 0 ? " ▲" : " ▼") : "");
-        th.dataset.key = f.key;
-        const sort = () => { sortDir = sortKey === f.key ? -sortDir : 1; sortKey = f.key; page = 1; render(); };
-        th.onclick = sort;
-        if (i === 0) {
-          th.className = "sticky"; // Project ID stays first and fixed
-        } else {
-          th.draggable = true;
-          th.tabIndex = 0;
-          th.title = "Click to sort. Drag to reorder, or press Alt+Left / Alt+Right.";
-          th.addEventListener("dragstart", (e) => { dragKey = f.key; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", f.key); th.classList.add("dragging"); });
-          th.addEventListener("dragend", () => { dragKey = null; head.querySelectorAll("th").forEach((x) => x.classList.remove("dragging", "drop-before", "drop-after")); });
-          th.addEventListener("dragover", (e) => {
-            if (!dragKey || dragKey === f.key) return;
-            e.preventDefault();
-            const r = th.getBoundingClientRect();
-            const after = e.clientX > r.left + r.width / 2;
-            th.classList.toggle("drop-after", after);
-            th.classList.toggle("drop-before", !after);
-          });
-          th.addEventListener("dragleave", () => th.classList.remove("drop-before", "drop-after"));
-          th.addEventListener("drop", (e) => {
-            e.preventDefault();
-            if (!dragKey || dragKey === f.key) return;
-            const r = th.getBoundingClientRect();
-            moveColumn(dragKey, f.key, e.clientX > r.left + r.width / 2);
-          });
-          th.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sort(); return; }
-            if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
-              e.preventDefault();
-              const visible = order.filter((k) => allCols.checked || COMPACT.includes(k));
-              const idx = visible.indexOf(f.key) + (e.key === "ArrowLeft" ? -1 : 1);
-              if (idx < 1 || idx >= visible.length) return; // never before Project ID, never past the end
-              moveColumn(f.key, visible[idx], e.key === "ArrowRight");
-              grid.querySelector('th[data-key="' + f.key + '"]')?.focus();
+            function makeInput(f, value) {
+                let el;
+                if (f.type === "select") {
+                    el = document.createElement("select");
+                    el.append(
+                        new Option("", ""),
+                        ...f.options.map((o) => new Option(o, o)),
+                    );
+                } else if (f.type === "longtext") {
+                    el = document.createElement("textarea");
+                } else {
+                    el = document.createElement("input");
+                    el.type =
+                        f.type === "date"
+                            ? "date"
+                            : f.type === "email"
+                              ? "email"
+                              : f.type === "text"
+                                ? "text"
+                                : "number";
+                    if (f.type === "money") el.step = "0.01";
+                }
+                el.value = value ?? "";
+                if (f.readOnly) {
+                    el.readOnly = true;
+                    el.disabled = true;
+                }
+                return el;
             }
-          });
-        }
-        head.append(th);
-      });
-      const body = grid.createTBody();
-      for (const row of pageRows) {
-        const tr = body.insertRow();
-        cols.forEach((f, i) => {
-          const td = tr.insertCell();
-          if (isNum(f)) td.className = "num";
-          if (i === 0) {
-            td.className = "sticky";
-            const b = document.createElement("button");
-            b.type = "button";
-            b.className = "open-btn";
-            b.textContent = `✎ ${row.projectId}`;
-            b.title = "Open all fields";
-            b.onclick = () => openDrawer(row.projectId);
-            td.append(b);
-            return;
-          }
-          const el = makeInput(f, row[f.key]);
-          if (!f.readOnly) el.addEventListener("change", () => saveField(row, f, el, td));
-          td.append(f.type === "date" && !f.readOnly ? dateField(el) : el);
-        });
-      }
-    }
 
-    // ---- Column order (saved per admin in DynamoDB) ----
-    /** Saved keys that still exist, in saved order, then any new fields; Project ID always first. */
-    function normalizeOrder(saved) {
-      const known = new Set(fields.map((f) => f.key));
-      const out = [];
-      for (const k of Array.isArray(saved) ? saved : []) if (known.has(k) && !out.includes(k)) out.push(k);
-      for (const f of fields) if (!out.includes(f.key)) out.push(f.key);
-      return ["projectId", ...out.filter((k) => k !== "projectId")];
-    }
+            /** Save one field; `mark` is the element that flashes (table cell or drawer field). */
+            async function saveField(row, f, el, mark) {
+                const original = row[f.key] ?? "";
+                if (String(el.value) === String(original)) return;
+                mark.classList.remove("saved", "error");
+                mark.classList.add("saving");
+                try {
+                    const { row: updated } = await api(
+                        `/api/admin/requests/${row.projectId}`,
+                        { method: "PATCH", body: { [f.key]: el.value } },
+                    );
+                    Object.assign(row, updated);
+                    el.value = row[f.key] ?? "";
+                    mark.classList.replace("saving", "saved");
+                    mark.title = "";
+                    clearFail();
+                    setTimeout(() => mark.classList.remove("saved"), 1200);
+                } catch (e) {
+                    mark.classList.replace("saving", "error");
+                    mark.title = e.message;
+                    el.value = original;
+                    fail(`Project ${row.projectId} – ${f.label}: ${e.message}`);
+                }
+            }
 
-    let saveTimer = null;
-    function savePrefs() {
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(async () => {
-        const state = document.getElementById("saveState");
-        try {
-          await api("/api/admin/prefs", { method: "PUT", body: { columnOrder: order.join() === defaultOrder.join() ? null : order } });
-          state.textContent = "Column order saved to your profile.";
-          clearFail();
-        } catch (e) {
-          fail("Could not save column order: " + e.message);
-        }
-      }, 300);
-    }
+            // ---- Filtering (runs over ALL rows, before pagination) ----
+            function setFilter(key, patch) {
+                const next = { ...(filters[key] || {}), ...patch };
+                for (const k of Object.keys(next))
+                    if (next[k] === "" || next[k] === undefined) delete next[k];
+                if (Array.isArray(next.in) && !next.in.length) delete next.in;
+                if (Object.keys(next).length) filters[key] = next;
+                else delete filters[key];
+                page = 1;
+                render();
+            }
 
-    function moveColumn(key, targetKey, after) {
-      if (key === targetKey || key === "projectId" || targetKey === "projectId" && !after) return;
-      const next = order.filter((k) => k !== key);
-      let idx = next.indexOf(targetKey);
-      if (idx < 0) return;
-      next.splice(after ? idx + 1 : idx, 0, key);
-      order = next;
-      render();
-      savePrefs();
-    }
+            function matches(row, q) {
+                if (
+                    q &&
+                    !Object.values(row).some((v) =>
+                        String(v ?? "")
+                            .toLowerCase()
+                            .includes(q),
+                    )
+                )
+                    return false;
+                for (const [key, fv] of Object.entries(filters)) {
+                    const f = byKey[key],
+                        v = row[key];
+                    if (fv.text !== undefined) {
+                        if (
+                            !String(v ?? "")
+                                .toLowerCase()
+                                .includes(fv.text.toLowerCase())
+                        )
+                            return false;
+                    } else if (fv.in !== undefined) {
+                        if (!fv.in.includes(String(v ?? ""))) return false;
+                    } else {
+                        if (v === null || v === undefined || v === "")
+                            return false;
+                        const conv = (x) => (isNum(f) ? Number(x) : String(x));
+                        if (fv.from !== undefined && conv(v) < conv(fv.from))
+                            return false;
+                        if (fv.to !== undefined && conv(v) > conv(fv.to))
+                            return false;
+                    }
+                }
+                return true;
+            }
 
-    // ---- Detail panel ----
-    function openDrawer(id) {
-      const row = rows.find((r) => r.projectId === id);
-      if (!row) return;
-      openId = id;
-      document.getElementById("drawerTitle").textContent = `Project ${row.projectId}${row.projectName ? " — " + row.projectName : ""}`;
-      const body = document.getElementById("drawerBody");
-      body.replaceChildren();
-      for (const [title, keys] of SECTIONS) {
-        const sec = document.createElement("section");
-        sec.className = "dsec";
-        const h = document.createElement("h3");
-        h.textContent = title;
-        const g = document.createElement("div");
-        g.className = "dgrid";
-        for (const k of keys) {
-          const f = byKey[k];
-          if (!f) continue;
-          const wrap = document.createElement("div");
-          wrap.className = "dfield" + (f.type === "longtext" ? " wide" : "");
-          const label = document.createElement("label");
-          label.textContent = f.label;
-          const el = makeInput(f, row[k]);
-          el.id = "d_" + k;
-          label.htmlFor = el.id;
-          if (!f.readOnly) el.addEventListener("change", () => saveField(row, f, el, wrap));
-          wrap.append(label, f.type === "date" && !f.readOnly ? dateField(el) : el);
-          g.append(wrap);
-        }
-        sec.append(h, g);
-        body.append(sec);
-      }
-      overlay.hidden = drawer.hidden = false;
-      body.scrollTop = 0;
-      document.getElementById("drawerClose").focus();
-    }
+            // Multi-select dropdown: stays open while ticking, chips for picks, search box, picks are OR'd.
+            function closeAllMultiSelectPopups() {
+                document
+                    .querySelectorAll(".multi-select-popup:not([hidden])")
+                    .forEach((popup) => {
+                        popup.hidden = true;
+                        popup.previousElementSibling.setAttribute(
+                            "aria-expanded",
+                            "false",
+                        );
+                    });
+            }
+            document.addEventListener("click", (event) => {
+                if (!event.target.closest(".multi-select"))
+                    closeAllMultiSelectPopups();
+            });
+            filterPanel.addEventListener("scroll", closeAllMultiSelectPopups);
+            window.addEventListener("resize", closeAllMultiSelectPopups);
+            document.addEventListener("keydown", (event) => {
+                if (event.key !== "Escape") return;
+                const openPopup = document.querySelector(
+                    ".multi-select-popup:not([hidden])",
+                );
+                if (!openPopup) return;
+                const toggleButton = openPopup.previousElementSibling;
+                closeAllMultiSelectPopups();
+                toggleButton.focus();
+            });
 
-    function closeDrawer() {
-      if (drawer.hidden) return;
-      overlay.hidden = drawer.hidden = true;
-      openId = null;
-      render(); // reflect any edits made in the panel
-    }
-    document.getElementById("drawerClose").onclick = closeDrawer;
-    overlay.onclick = closeDrawer;
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !document.querySelector(".dp-popup")) closeDrawer(); });
+            /** Builds one multi-select for a "select" field. Returns its element plus functions to set or clear the selection. */
+            function buildMultiSelect(field) {
+                const selectedOptions = new Set();
+                const container = document.createElement("div");
+                container.className = "multi-select";
+                const toggleButton = document.createElement("button");
+                toggleButton.type = "button";
+                toggleButton.className = "multi-select-toggle";
+                toggleButton.setAttribute("aria-haspopup", "listbox");
+                toggleButton.setAttribute("aria-expanded", "false");
+                const popup = document.createElement("div");
+                popup.className = "multi-select-popup";
+                popup.hidden = true;
+                const searchInput = document.createElement("input");
+                searchInput.type = "search";
+                searchInput.placeholder = "Search…";
+                searchInput.setAttribute("aria-label", "Search " + field.label);
+                const optionList = document.createElement("div");
+                optionList.className = "multi-select-options";
+                const noMatchesMessage = document.createElement("div");
+                noMatchesMessage.className = "multi-select-no-matches";
+                noMatchesMessage.textContent = "No matches";
+                noMatchesMessage.hidden = true;
+                const optionRows = field.options.map((optionText) => {
+                    const optionLabel = document.createElement("label");
+                    const checkbox = document.createElement("input");
+                    checkbox.type = "checkbox";
+                    checkbox.value = optionText;
+                    const optionName = document.createElement("span");
+                    optionName.textContent = optionText;
+                    optionLabel.append(checkbox, optionName);
+                    checkbox.addEventListener("change", () => {
+                        if (checkbox.checked) selectedOptions.add(optionText);
+                        else selectedOptions.delete(optionText);
+                        searchInput.value = "";
+                        filterOptionsBySearch();
+                        onSelectionChanged();
+                    });
+                    return { optionText, optionLabel, checkbox };
+                });
+                optionList.append(
+                    ...optionRows.map((optionRow) => optionRow.optionLabel),
+                    noMatchesMessage,
+                );
+                searchInput.addEventListener("input", filterOptionsBySearch);
+                popup.append(searchInput, optionList);
+                container.append(toggleButton, popup);
 
-    try {
-      await initAuth();
-      const me = await api("/api/me");
-      if (!me.isAdmin) throw new Error("You do not have admin access to this page.");
-      fields = (await api("/api/schema")).fields;
-      byKey = Object.fromEntries(fields.map((f) => [f.key, f]));
-      rows = (await api("/api/admin/requests")).rows;
-      defaultOrder = fields.map((f) => f.key);
-      order = defaultOrder.slice();
-      try {
-        const prefs = await api("/api/admin/prefs");
-        order = normalizeOrder(prefs.columnOrder);
-        savedFilters = prefs.savedFilters || [];
-      } catch (e) {
-        fail("Could not load your saved column order (using default): " + e.message);
-      }
-      resetColsBtn.onclick = () => { order = defaultOrder.slice(); render(); savePrefs(); };
-      buildFilterPanel();
-      search.addEventListener("input", () => { page = 1; render(); });
-      filtersBtn.onclick = () => {
-        filterPanel.hidden = !filterPanel.hidden;
-        filtersBtn.setAttribute("aria-expanded", String(!filterPanel.hidden));
-      };
-      clearBtn.onclick = clearAll;
-      allCols.addEventListener("change", render);
-      render();
-    } catch (e) {
-      fail(e.message);
-    }
-  </script>
-</body>
+                function filterOptionsBySearch() {
+                    const searchText = searchInput.value.trim().toLowerCase();
+                    let visibleCount = 0;
+                    for (const optionRow of optionRows) {
+                        const isMatch =
+                            !searchText ||
+                            optionRow.optionText
+                                .toLowerCase()
+                                .includes(searchText);
+                        optionRow.optionLabel.hidden = !isMatch;
+                        if (isMatch) visibleCount++;
+                    }
+                    noMatchesMessage.hidden = visibleCount > 0;
+                }
+                // The user ticked or unticked an option: refresh the chips and apply the filter.
+                function onSelectionChanged() {
+                    renderChips();
+                    setFilter(field.key, { in: [...selectedOptions] });
+                }
+                // Set the selection from saved state without touching `filters` (the caller owns that).
+                function setSelection(values) {
+                    selectedOptions.clear();
+                    for (const optionText of field.options)
+                        if (values.includes(optionText))
+                            selectedOptions.add(optionText);
+                    optionRows.forEach(
+                        (optionRow) =>
+                            (optionRow.checkbox.checked = selectedOptions.has(
+                                optionRow.optionText,
+                            )),
+                    );
+                    renderChips();
+                }
+                function renderChips() {
+                    toggleButton.replaceChildren();
+                    if (!selectedOptions.size) {
+                        toggleButton.textContent = "Any";
+                    } else {
+                        for (const optionText of selectedOptions) {
+                            const chip = document.createElement("span");
+                            chip.className = "multi-select-chip";
+                            chip.append(
+                                document.createTextNode(optionText + " "),
+                            );
+                            const removeMark = document.createElement("span");
+                            removeMark.className = "multi-select-chip-remove";
+                            removeMark.textContent = "×";
+                            removeMark.setAttribute("aria-hidden", "true");
+                            chip.append(removeMark);
+                            toggleButton.append(chip);
+                        }
+                    }
+                    toggleButton.setAttribute(
+                        "aria-label",
+                        field.label +
+                            ": " +
+                            (selectedOptions.size
+                                ? [...selectedOptions].join(", ")
+                                : "Any"),
+                    );
+                }
+                // The popup is position: fixed so the scrolling filter panel cannot clip it.
+                function positionPopup() {
+                    const toggleRect = toggleButton.getBoundingClientRect();
+                    popup.style.left = toggleRect.left + "px";
+                    popup.style.top = toggleRect.bottom + 2 + "px";
+                    popup.style.minWidth = toggleRect.width + "px";
+                }
+                toggleButton.addEventListener("click", () => {
+                    const isOpening = popup.hidden;
+                    closeAllMultiSelectPopups();
+                    if (isOpening) {
+                        popup.hidden = false;
+                        toggleButton.setAttribute("aria-expanded", "true");
+                        positionPopup();
+                        searchInput.focus();
+                    }
+                });
+                function clearSelection() {
+                    selectedOptions.clear();
+                    optionRows.forEach(
+                        (optionRow) => (optionRow.checkbox.checked = false),
+                    );
+                    searchInput.value = "";
+                    filterOptionsBySearch();
+                    renderChips();
+                    closeAllMultiSelectPopups();
+                }
+                renderChips();
+                return { element: container, clearSelection, setSelection };
+            }
+
+            function buildFilterPanel() {
+                multiSelectClearers = [];
+                filterPanel.replaceChildren();
+                const grid = document.createElement("div");
+                grid.className = "fgrid";
+                for (const f of fields) {
+                    const wrap = document.createElement("div");
+                    wrap.className = "ffield";
+                    const label = document.createElement("label");
+                    label.textContent = f.label;
+                    wrap.append(label);
+                    const mk = (type) => {
+                        const i = document.createElement("input");
+                        i.type = type;
+                        return i;
+                    };
+                    if (f.type === "select") {
+                        const multiSelect = buildMultiSelect(f);
+                        multiSelect.setSelection(
+                            (filters[f.key] || {}).in || [],
+                        );
+                        multiSelectClearers.push(multiSelect.clearSelection);
+                        wrap.append(multiSelect.element);
+                    } else if (f.type === "date" || isNum(f)) {
+                        const range = document.createElement("div");
+                        range.className = "frange";
+                        for (const [part, ph] of [
+                            ["from", "From"],
+                            ["to", "To"],
+                        ]) {
+                            const i = mk(f.type === "date" ? "date" : "number");
+                            i.placeholder = ph;
+                            i.setAttribute(
+                                "aria-label",
+                                f.label + " " + ph.toLowerCase(),
+                            );
+                            if (f.type === "money") i.step = "0.01";
+                            i.value = (filters[f.key] || {})[part] || "";
+                            i.addEventListener("input", () =>
+                                setFilter(f.key, { [part]: i.value }),
+                            );
+                            range.append(f.type === "date" ? dateField(i) : i);
+                        }
+                        wrap.append(range);
+                    } else {
+                        const i = mk("text");
+                        i.placeholder = "Contains…";
+                        i.value = (filters[f.key] || {}).text || "";
+                        i.addEventListener("input", () =>
+                            setFilter(f.key, { text: i.value }),
+                        );
+                        wrap.append(i);
+                    }
+                    grid.append(wrap);
+                }
+                filterPanel.append(grid);
+            }
+
+            // ---- Saved filters (per user, for quick switching between views; never applied on load) ----
+            function hasActiveFilters() {
+                return (
+                    Object.keys(filters).length > 0 ||
+                    search.value.trim() !== ""
+                );
+            }
+
+            function closeSavedFiltersPopup() {
+                savedFiltersPopup.hidden = true;
+                savedFiltersButton.setAttribute("aria-expanded", "false");
+            }
+
+            function applySavedFilter(savedFilter) {
+                filters = JSON.parse(JSON.stringify(savedFilter.filters || {}));
+                search.value = savedFilter.search || "";
+                page = 1;
+                buildFilterPanel(); // controls are hydrated from `filters`
+                render();
+                closeSavedFiltersPopup();
+            }
+
+            async function saveCurrentFilters(nameInput) {
+                const name = nameInput.value.trim();
+                if (!name || !hasActiveFilters()) return;
+                const sameNameFilter = savedFilters.find(
+                    (savedFilter) =>
+                        savedFilter.name.toLowerCase() === name.toLowerCase(),
+                );
+                if (
+                    sameNameFilter &&
+                    !confirm(
+                        'Replace the saved filter "' +
+                            sameNameFilter.name +
+                            '"?',
+                    )
+                )
+                    return;
+                try {
+                    const response = await api("/api/admin/saved-filters", {
+                        method: "POST",
+                        body: { name, filters, search: search.value.trim() },
+                    });
+                    savedFilters = response.savedFilters;
+                    document.getElementById("saveState").textContent =
+                        'Saved filter "' + name + '".';
+                    clearFail();
+                    renderSavedFiltersPopup();
+                } catch (e) {
+                    fail("Could not save filter: " + e.message);
+                }
+            }
+
+            async function deleteSavedFilter(savedFilter) {
+                if (
+                    !confirm(
+                        'Delete the saved filter "' + savedFilter.name + '"?',
+                    )
+                )
+                    return;
+                try {
+                    const response = await api(
+                        "/api/admin/saved-filters/" +
+                            encodeURIComponent(savedFilter.id),
+                        { method: "DELETE" },
+                    );
+                    savedFilters = response.savedFilters;
+                    clearFail();
+                    renderSavedFiltersPopup();
+                } catch (e) {
+                    fail("Could not delete filter: " + e.message);
+                }
+            }
+
+            function renderSavedFiltersPopup() {
+                savedFiltersPopup.replaceChildren();
+                const savedFilterList = document.createElement("ul");
+                savedFilterList.className = "saved-list";
+                if (!savedFilters.length) {
+                    const emptyMessage = document.createElement("li");
+                    emptyMessage.className = "saved-empty";
+                    emptyMessage.textContent = "No saved filters yet.";
+                    savedFilterList.append(emptyMessage);
+                }
+                for (const savedFilter of savedFilters) {
+                    const listItem = document.createElement("li");
+                    const applyButton = document.createElement("button");
+                    applyButton.type = "button";
+                    applyButton.className = "saved-apply";
+                    applyButton.textContent = savedFilter.name;
+                    applyButton.addEventListener("click", () =>
+                        applySavedFilter(savedFilter),
+                    );
+                    const deleteButton = document.createElement("button");
+                    deleteButton.type = "button";
+                    deleteButton.className = "saved-delete";
+                    deleteButton.textContent = "×";
+                    deleteButton.setAttribute(
+                        "aria-label",
+                        "Delete saved filter " + savedFilter.name,
+                    );
+                    deleteButton.addEventListener("click", () =>
+                        deleteSavedFilter(savedFilter),
+                    );
+                    listItem.append(applyButton, deleteButton);
+                    savedFilterList.append(listItem);
+                }
+                const saveForm = document.createElement("form");
+                saveForm.className = "saved-form";
+                const nameInput = document.createElement("input");
+                nameInput.type = "text";
+                nameInput.maxLength = 60;
+                nameInput.placeholder = "Name this view";
+                nameInput.setAttribute(
+                    "aria-label",
+                    "Name for the saved filter",
+                );
+                const saveButton = document.createElement("button");
+                saveButton.type = "submit";
+                saveButton.textContent = "Save";
+                const refreshSaveButton = () => {
+                    const hasFilters = hasActiveFilters();
+                    const hasName = nameInput.value.trim() !== "";
+                    saveButton.disabled = !hasFilters || !hasName;
+                    saveButton.title = !hasFilters
+                        ? "Set a filter or search first"
+                        : !hasName
+                          ? "Enter a name for this view"
+                          : "";
+                    nameInput.title = hasFilters
+                        ? ""
+                        : "Set a filter or search first";
+                };
+                updateSaveButtonState = refreshSaveButton; // render() calls this so Save tracks filter changes while the popup is open
+                nameInput.addEventListener("input", refreshSaveButton);
+                saveForm.addEventListener("submit", (event) => {
+                    event.preventDefault();
+                    saveCurrentFilters(nameInput);
+                });
+                refreshSaveButton();
+                saveForm.append(nameInput, saveButton);
+                savedFiltersPopup.append(savedFilterList, saveForm);
+            }
+
+            savedFiltersButton.addEventListener("click", () => {
+                const isOpening = savedFiltersPopup.hidden;
+                if (isOpening) renderSavedFiltersPopup();
+                savedFiltersPopup.hidden = !isOpening;
+                savedFiltersButton.setAttribute(
+                    "aria-expanded",
+                    String(isOpening),
+                );
+            });
+            document.addEventListener("click", (event) => {
+                if (!event.target.closest(".saved-wrap"))
+                    closeSavedFiltersPopup();
+            });
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Escape" && !savedFiltersPopup.hidden) {
+                    closeSavedFiltersPopup();
+                    savedFiltersButton.focus();
+                }
+            });
+
+            function clearAll() {
+                filters = {};
+                search.value = "";
+                filterPanel
+                    .querySelectorAll("input:not([type=checkbox])")
+                    .forEach((input) => (input.value = ""));
+                multiSelectClearers.forEach((clearSelection) =>
+                    clearSelection(),
+                );
+                page = 1;
+                render();
+            }
+
+            // ---- Pagination ----
+            function renderPager(total, pages) {
+                pager.replaceChildren();
+                const size = document.createElement("label");
+                size.className = "pager-size";
+                size.append("Rows per page ");
+                const sel = document.createElement("select");
+                sel.append(...PAGE_SIZES.map((n) => new Option(n, n)));
+                sel.value = pageSize;
+                sel.onchange = () => {
+                    pageSize = Number(sel.value);
+                    try {
+                        localStorage.setItem("pageSize", String(pageSize));
+                    } catch {}
+                    page = 1;
+                    render();
+                };
+                size.append(sel);
+
+                const from = total ? (page - 1) * pageSize + 1 : 0;
+                const to = Math.min(total, page * pageSize);
+                const info = document.createElement("span");
+                info.className = "pager-info";
+                info.textContent =
+                    "Showing " +
+                    from +
+                    "–" +
+                    to +
+                    " of " +
+                    total +
+                    (total !== rows.length
+                        ? " (filtered from " + rows.length + ")"
+                        : "");
+
+                const nav = document.createElement("div");
+                nav.className = "pager-nav";
+                const btn = (
+                    text,
+                    target,
+                    { disabled = false, current = false, label } = {},
+                ) => {
+                    const b = document.createElement("button");
+                    b.type = "button";
+                    b.textContent = text;
+                    if (label) b.setAttribute("aria-label", label);
+                    b.disabled = disabled;
+                    if (current) {
+                        b.className = "cur";
+                        b.setAttribute("aria-current", "page");
+                    }
+                    b.onclick = () => {
+                        page = target;
+                        render();
+                    };
+                    return b;
+                };
+                nav.append(
+                    btn("«", 1, { disabled: page === 1, label: "First page" }),
+                    btn("‹", page - 1, {
+                        disabled: page === 1,
+                        label: "Previous page",
+                    }),
+                );
+                // windowed page numbers: first, last, and 2 either side of the current page
+                const shown = new Set([1, pages]);
+                for (let i = page - 2; i <= page + 2; i++)
+                    if (i >= 1 && i <= pages) shown.add(i);
+                let prev = 0;
+                for (const n of [...shown].sort((a, b) => a - b)) {
+                    if (n - prev > 1) {
+                        const gap = document.createElement("span");
+                        gap.textContent = "…";
+                        gap.className = "gap";
+                        nav.append(gap);
+                    }
+                    nav.append(btn(String(n), n, { current: n === page }));
+                    prev = n;
+                }
+                nav.append(
+                    btn("›", page + 1, {
+                        disabled: page === pages,
+                        label: "Next page",
+                    }),
+                    btn("»", pages, {
+                        disabled: page === pages,
+                        label: "Last page",
+                    }),
+                );
+                pager.append(size, info, nav);
+            }
+
+            function render() {
+                const q = search.value.trim().toLowerCase();
+                const cols = order
+                    .filter((k) => allCols.checked || COMPACT.includes(k))
+                    .map((k) => byKey[k]);
+                resetColsBtn.hidden = order.join() === defaultOrder.join();
+                const view = rows.filter((r) => matches(r, q));
+                const activeCount = Object.keys(filters).length;
+                filtersBtn.textContent = activeCount
+                    ? "Filters (" + activeCount + ")"
+                    : "Filters";
+                clearBtn.hidden = !activeCount && !q;
+                updateSaveButtonState();
+                view.sort((a, b) => {
+                    const x = a[sortKey] ?? "",
+                        y = b[sortKey] ?? "";
+                    return (
+                        (typeof x === "number" && typeof y === "number"
+                            ? x - y
+                            : String(x).localeCompare(String(y))) * sortDir
+                    );
+                });
+                const total = view.length;
+                const pages = Math.max(1, Math.ceil(total / pageSize));
+                page = Math.min(Math.max(1, page), pages);
+                document.getElementById("count").textContent =
+                    total + " of " + rows.length + " requests";
+                renderPager(total, pages);
+                const pageRows = view.slice(
+                    (page - 1) * pageSize,
+                    page * pageSize,
+                );
+
+                grid.replaceChildren();
+                grid.classList.toggle("compact", !allCols.checked);
+                const head = grid.createTHead().insertRow();
+                cols.forEach((f, i) => {
+                    const th = document.createElement("th");
+                    th.textContent =
+                        f.label +
+                        (sortKey === f.key ? (sortDir > 0 ? " ▲" : " ▼") : "");
+                    th.dataset.key = f.key;
+                    const sort = () => {
+                        sortDir = sortKey === f.key ? -sortDir : 1;
+                        sortKey = f.key;
+                        page = 1;
+                        render();
+                    };
+                    th.onclick = sort;
+                    if (i === 0) {
+                        th.className = "sticky"; // Project ID stays first and fixed
+                    } else {
+                        th.draggable = true;
+                        th.tabIndex = 0;
+                        th.title =
+                            "Click to sort. Drag to reorder, or press Alt+Left / Alt+Right.";
+                        th.addEventListener("dragstart", (e) => {
+                            dragKey = f.key;
+                            e.dataTransfer.effectAllowed = "move";
+                            e.dataTransfer.setData("text/plain", f.key);
+                            th.classList.add("dragging");
+                        });
+                        th.addEventListener("dragend", () => {
+                            dragKey = null;
+                            head.querySelectorAll("th").forEach((x) =>
+                                x.classList.remove(
+                                    "dragging",
+                                    "drop-before",
+                                    "drop-after",
+                                ),
+                            );
+                        });
+                        th.addEventListener("dragover", (e) => {
+                            if (!dragKey || dragKey === f.key) return;
+                            e.preventDefault();
+                            const r = th.getBoundingClientRect();
+                            const after = e.clientX > r.left + r.width / 2;
+                            th.classList.toggle("drop-after", after);
+                            th.classList.toggle("drop-before", !after);
+                        });
+                        th.addEventListener("dragleave", () =>
+                            th.classList.remove("drop-before", "drop-after"),
+                        );
+                        th.addEventListener("drop", (e) => {
+                            e.preventDefault();
+                            if (!dragKey || dragKey === f.key) return;
+                            const r = th.getBoundingClientRect();
+                            moveColumn(
+                                dragKey,
+                                f.key,
+                                e.clientX > r.left + r.width / 2,
+                            );
+                        });
+                        th.addEventListener("keydown", (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                sort();
+                                return;
+                            }
+                            if (
+                                e.altKey &&
+                                (e.key === "ArrowLeft" ||
+                                    e.key === "ArrowRight")
+                            ) {
+                                e.preventDefault();
+                                const visible = order.filter(
+                                    (k) =>
+                                        allCols.checked || COMPACT.includes(k),
+                                );
+                                const idx =
+                                    visible.indexOf(f.key) +
+                                    (e.key === "ArrowLeft" ? -1 : 1);
+                                if (idx < 1 || idx >= visible.length) return; // never before Project ID, never past the end
+                                moveColumn(
+                                    f.key,
+                                    visible[idx],
+                                    e.key === "ArrowRight",
+                                );
+                                grid.querySelector(
+                                    'th[data-key="' + f.key + '"]',
+                                )?.focus();
+                            }
+                        });
+                    }
+                    head.append(th);
+                });
+                const body = grid.createTBody();
+                for (const row of pageRows) {
+                    const tr = body.insertRow();
+                    cols.forEach((f, i) => {
+                        const td = tr.insertCell();
+                        if (isNum(f)) td.className = "num";
+                        if (i === 0) {
+                            td.className = "sticky";
+                            const b = document.createElement("button");
+                            b.type = "button";
+                            b.className = "open-btn";
+                            b.textContent = `✎ ${row.projectId}`;
+                            b.title = "Open all fields";
+                            b.onclick = () => openDrawer(row.projectId);
+                            td.append(b);
+                            return;
+                        }
+                        const el = makeInput(f, row[f.key]);
+                        if (!f.readOnly)
+                            el.addEventListener("change", () =>
+                                saveField(row, f, el, td),
+                            );
+                        td.append(
+                            f.type === "date" && !f.readOnly
+                                ? dateField(el)
+                                : el,
+                        );
+                    });
+                }
+            }
+
+            // ---- Column order (saved per admin in DynamoDB) ----
+            /** Saved keys that still exist, in saved order, then any new fields; Project ID always first. */
+            function normalizeOrder(saved) {
+                const known = new Set(fields.map((f) => f.key));
+                const out = [];
+                for (const k of Array.isArray(saved) ? saved : [])
+                    if (known.has(k) && !out.includes(k)) out.push(k);
+                for (const f of fields)
+                    if (!out.includes(f.key)) out.push(f.key);
+                return ["projectId", ...out.filter((k) => k !== "projectId")];
+            }
+
+            let saveTimer = null;
+            function savePrefs() {
+                clearTimeout(saveTimer);
+                saveTimer = setTimeout(async () => {
+                    const state = document.getElementById("saveState");
+                    try {
+                        await api("/api/admin/prefs", {
+                            method: "PUT",
+                            body: {
+                                columnOrder:
+                                    order.join() === defaultOrder.join()
+                                        ? null
+                                        : order,
+                            },
+                        });
+                        state.textContent =
+                            "Column order saved to your profile.";
+                        clearFail();
+                    } catch (e) {
+                        fail("Could not save column order: " + e.message);
+                    }
+                }, 300);
+            }
+
+            function moveColumn(key, targetKey, after) {
+                if (
+                    key === targetKey ||
+                    key === "projectId" ||
+                    (targetKey === "projectId" && !after)
+                )
+                    return;
+                const next = order.filter((k) => k !== key);
+                let idx = next.indexOf(targetKey);
+                if (idx < 0) return;
+                next.splice(after ? idx + 1 : idx, 0, key);
+                order = next;
+                render();
+                savePrefs();
+            }
+
+            // ---- Detail panel ----
+            function openDrawer(id) {
+                const row = rows.find((r) => r.projectId === id);
+                if (!row) return;
+                openId = id;
+                document.getElementById("drawerTitle").textContent =
+                    `Project ${row.projectId}${row.projectName ? " — " + row.projectName : ""}`;
+                const body = document.getElementById("drawerBody");
+                body.replaceChildren();
+                for (const [title, keys] of SECTIONS) {
+                    const sec = document.createElement("section");
+                    sec.className = "dsec";
+                    const h = document.createElement("h3");
+                    h.textContent = title;
+                    const g = document.createElement("div");
+                    g.className = "dgrid";
+                    for (const k of keys) {
+                        const f = byKey[k];
+                        if (!f) continue;
+                        const wrap = document.createElement("div");
+                        wrap.className =
+                            "dfield" + (f.type === "longtext" ? " wide" : "");
+                        const label = document.createElement("label");
+                        label.textContent = f.label;
+                        const el = makeInput(f, row[k]);
+                        el.id = "d_" + k;
+                        label.htmlFor = el.id;
+                        if (!f.readOnly)
+                            el.addEventListener("change", () =>
+                                saveField(row, f, el, wrap),
+                            );
+                        wrap.append(
+                            label,
+                            f.type === "date" && !f.readOnly
+                                ? dateField(el)
+                                : el,
+                        );
+                        g.append(wrap);
+                    }
+                    sec.append(h, g);
+                    body.append(sec);
+                }
+                overlay.hidden = drawer.hidden = false;
+                body.scrollTop = 0;
+                document.getElementById("drawerClose").focus();
+            }
+
+            function closeDrawer() {
+                if (drawer.hidden) return;
+                overlay.hidden = drawer.hidden = true;
+                openId = null;
+                render(); // reflect any edits made in the panel
+            }
+            document.getElementById("drawerClose").onclick = closeDrawer;
+            overlay.onclick = closeDrawer;
+            document.addEventListener("keydown", (e) => {
+                if (e.key === "Escape" && !document.querySelector(".dp-popup"))
+                    closeDrawer();
+            });
+
+            try {
+                await initAuth();
+                const me = await api("/api/me");
+                if (!me.isAdmin)
+                    throw new Error(
+                        "You do not have admin access to this page.",
+                    );
+                fields = (await api("/api/schema")).fields;
+                byKey = Object.fromEntries(fields.map((f) => [f.key, f]));
+                rows = (await api("/api/admin/requests")).rows;
+                defaultOrder = fields.map((f) => f.key);
+                order = defaultOrder.slice();
+                try {
+                    const prefs = await api("/api/admin/prefs");
+                    order = normalizeOrder(prefs.columnOrder);
+                    savedFilters = prefs.savedFilters || [];
+                } catch (e) {
+                    fail(
+                        "Could not load your saved column order (using default): " +
+                            e.message,
+                    );
+                }
+                resetColsBtn.onclick = () => {
+                    order = defaultOrder.slice();
+                    render();
+                    savePrefs();
+                };
+                buildFilterPanel();
+                search.addEventListener("input", () => {
+                    page = 1;
+                    render();
+                });
+                filtersBtn.onclick = () => {
+                    filterPanel.hidden = !filterPanel.hidden;
+                    filtersBtn.setAttribute(
+                        "aria-expanded",
+                        String(!filterPanel.hidden),
+                    );
+                };
+                clearBtn.onclick = clearAll;
+                allCols.addEventListener("change", render);
+                render();
+            } catch (e) {
+                fail(e.message);
+            }
+        </script>
+    </body>
 </html>

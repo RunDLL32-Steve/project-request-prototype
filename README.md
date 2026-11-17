@@ -51,6 +51,7 @@ Do this in the [Entra admin center](https://entra.microsoft.com) (needs Applicat
 Create a separate registration for non-prod and prod.
 
 **A. Register the app**
+
 1. **Entra ID → App registrations → New registration.**
 2. Name: `Technology Project Request (nonprod)`. Supported account types: **Accounts in this organizational
    directory only** (single tenant). Leave Redirect URI blank for now. **Register.**
@@ -58,40 +59,46 @@ Create a separate registration for non-prod and prod.
    `EntraClientId` and `EntraTenantId` deploy parameters.
 
 **B. Expose the API scope** (the browser requests an access token for this scope)
+
 1. **Expose an API → Application ID URI → Add**; accept the default `api://<client-id>` and **Save**.
 2. **Add a scope:** name `access_as_user`; who can consent: **Admins and users**; fill in the display
    name/description (e.g. "Access the Technology Request app as the signed-in user"); state **Enabled**; **Add scope**.
 
 **C. Token version**
+
 1. **Manifest** (Microsoft Graph app manifest): under `api`, set `"requestedAccessTokenVersion": 2`. **Save.**
    (In the older AAD Graph manifest format it is `accessTokenAcceptedVersion` at the top level.)
 
 **D. Redirect URIs** (single-page application)
+
 1. **Authentication → Add a platform → Single-page application.**
 2. Add one URI per page. The app sends the page's own URL, so `/` and `/admin` are both needed:
-   - `https://<api-id>.execute-api.<region>.amazonaws.com/`
-   - `https://<api-id>.execute-api.<region>.amazonaws.com/admin`
-   - optional, for testing real SSO locally: `http://localhost:3000/` and `http://localhost:3000/admin`
+    - `https://<api-id>.execute-api.<region>.amazonaws.com/`
+    - `https://<api-id>.execute-api.<region>.amazonaws.com/admin`
+    - optional, for testing real SSO locally: `http://localhost:3000/` and `http://localhost:3000/admin`
 3. Leave implicit grant checkboxes **unchecked** (the app uses auth code + PKCE). **Configure / Save.**
 
 You will not know the API URL until the first SAM deploy (step 2 below), so deploy first, then come back and add
 the URIs from the `AppUrl` stack output.
 
 **E. Pre-consent the scope** (so users never see a consent prompt)
+
 1. **API permissions → Add a permission → My APIs →** this app **→ Delegated → `access_as_user` → Add.**
 2. **Grant admin consent for <tenant>** and confirm. (`User.Read` is already there by default.)
 
 **F. Create the app roles**
+
 1. **App roles → Create app role**, twice:
 
-   | Display name | Value (must match exactly) | Allowed member types | Description |
-   |---|---|---|---|
-   | Default | `Default` | Users/Groups | Can sign in and submit technology requests |
-   | Admin | `Admin` | Users/Groups | Can use the admin area and edit all requests |
+    | Display name | Value (must match exactly) | Allowed member types | Description                                  |
+    | ------------ | -------------------------- | -------------------- | -------------------------------------------- |
+    | Default      | `Default`                  | Users/Groups         | Can sign in and submit technology requests   |
+    | Admin        | `Admin`                    | Users/Groups         | Can use the admin area and edit all requests |
 
-   Both enabled. The **Value** is what the app reads from the token (`ENTRA_USER_ROLE` / `ENTRA_ADMIN_ROLE`).
+    Both enabled. The **Value** is what the app reads from the token (`ENTRA_USER_ROLE` / `ENTRA_ADMIN_ROLE`).
 
 **G. Assign people to the roles** (this is how access is controlled)
+
 1. **Entra ID → Enterprise applications →** open this app (same name) **→ Users and groups → Add user/group.**
 2. Select the users (or a security group; group-to-role assignment needs Entra ID P1/P2) and the role:
    `Default` for everyone who may submit requests, `Admin` for admins. An admin does not also need `Default`.
@@ -100,6 +107,7 @@ the URIs from the `AppUrl` stack output.
 4. Role changes take effect on the user's next token: have them sign out and back in (or close the browser tab/session).
 
 **H. Check it**
+
 - A `Default` user sees the form but no Admin link; `/admin` shows an access error and the admin API returns 403.
 - An `Admin` user sees the **Admin** link in the form header and can use `/admin`.
 - A user with no role cannot sign in (blocked by assignment) or gets "You have not been granted access".
@@ -117,19 +125,19 @@ sam deploy --guided \
 
 `--guided` saves your answers to `samconfig.toml` so later deploys are just `sam build && sam deploy`.
 
-> **Gotcha:** on an existing stack, `sam deploy` keeps each parameter's *previous* value unless you override it,
+> **Gotcha:** on an existing stack, `sam deploy` keeps each parameter's _previous_ value unless you override it,
 > not the template's new default. If you add or change a parameter default, pass it explicitly with
 > `--parameter-overrides` (and `--save-params`), then confirm with `GetFunctionConfiguration`.
 
-| Parameter | Default | Purpose |
-|---|---|---|
-| `Environment` | `nonprod` | `nonprod` or `prod`. Anything but `prod` shows a red environment banner on every page. |
-| `EntraTenantId`, `EntraClientId` | required | Used to validate sign-in tokens. |
-| `NotifyTo` | steven.millard@stsaviationgroup.com | Who gets the new-request email. |
-| `NotifyTransport` | `smtp` | `none` or `smtp`. |
-| `NotifyTestMode`, `NotifyTestRecipient` | `true`, steven.millard@... | **Safety rail:** while `true`, every email goes only to `NotifyTestRecipient`. Keep `true` outside prod. |
-| `SmtpHost`, `SmtpUser` | WorkMail host, `otp-notifications@sts-aviation-group.awsapps.com` | SMTP server and sending mailbox. |
-| `LambdaSecretsArn` | the forecast app's nonprod secret | Secret whose `WORKMAIL_PASSWORD` is the mailbox password. Read at runtime; never stored in the template or Lambda settings. |
+| Parameter                               | Default                                                           | Purpose                                                                                                                     |
+| --------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `Environment`                           | `nonprod`                                                         | `nonprod` or `prod`. Anything but `prod` shows a red environment banner on every page.                                      |
+| `EntraTenantId`, `EntraClientId`        | required                                                          | Used to validate sign-in tokens.                                                                                            |
+| `NotifyTo`                              | steven.millard@stsaviationgroup.com                               | Who gets the new-request email.                                                                                             |
+| `NotifyTransport`                       | `smtp`                                                            | `none` or `smtp`.                                                                                                           |
+| `NotifyTestMode`, `NotifyTestRecipient` | `true`, steven.millard@...                                        | **Safety rail:** while `true`, every email goes only to `NotifyTestRecipient`. Keep `true` outside prod.                    |
+| `SmtpHost`, `SmtpUser`                  | WorkMail host, `otp-notifications@sts-aviation-group.awsapps.com` | SMTP server and sending mailbox.                                                                                            |
+| `LambdaSecretsArn`                      | the forecast app's nonprod secret                                 | Secret whose `WORKMAIL_PASSWORD` is the mailbox password. Read at runtime; never stored in the template or Lambda settings. |
 
 What it creates: two DynamoDB tables (pay-per-request, encrypted, point-in-time recovery, **retained if the stack
 is deleted**): requests (partition key `projectId`, Number) and per-admin preferences (partition key `userId`, String),
@@ -191,13 +199,13 @@ See `.env.example` for all environment variables (`PORT`, `ENTRA_*`, `DEV_AUTH`,
 
 All `/api/*` routes need a valid Entra bearer token (except `GET /api/auth/config`, the sign-in bootstrap).
 
-| Route | Who | Purpose |
-|---|---|---|
-| `GET /api/me`, `GET /api/schema` | any signed-in user | Current user; field definitions |
-| `POST /api/requests` | any signed-in user | Submit a request |
-| `GET /api/admin/requests` | admin | List all requests |
-| `PATCH /api/admin/requests/:id` | admin | Update one or more fields of a request |
-| `GET /healthz` | public | Liveness |
+| Route                            | Who                | Purpose                                |
+| -------------------------------- | ------------------ | -------------------------------------- |
+| `GET /api/me`, `GET /api/schema` | any signed-in user | Current user; field definitions        |
+| `POST /api/requests`             | any signed-in user | Submit a request                       |
+| `GET /api/admin/requests`        | admin              | List all requests                      |
+| `PATCH /api/admin/requests/:id`  | admin              | Update one or more fields of a request |
+| `GET /healthz`                   | public             | Liveness                               |
 
 ## Known gaps
 

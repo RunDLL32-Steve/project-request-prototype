@@ -2,34 +2,62 @@
 import { FIELD_BY_KEY } from "./schema.js";
 
 export const MAX_SAVED = 25;
-const MAX_NAME = 60, MAX_TEXT = 200, MAX_IN = 50, MAX_RANGE = 50;
+const MAX_NAME_LENGTH = 60;
+const MAX_TEXT_LENGTH = 200;
+const MAX_VALUES_PER_FIELD = 50;
+const MAX_RANGE_LENGTH = 50;
 
-const isStr = (v, max) => typeof v === "string" && v.length <= max;
+const isStringUpTo = (value, maxLength) =>
+    typeof value === "string" && value.length <= maxLength;
 
-function validFilterValue(fv) {
-  if (!fv || typeof fv !== "object" || Array.isArray(fv)) return false;
-  const keys = Object.keys(fv);
-  if (!keys.length) return false;
-  return keys.every((k) => {
-    if (k === "text") return isStr(fv.text, MAX_TEXT);
-    if (k === "in") return Array.isArray(fv.in) && fv.in.length <= MAX_IN && fv.in.every((s) => isStr(s, MAX_TEXT));
-    if (k === "from" || k === "to") return isStr(fv[k], MAX_RANGE);
-    return false;
-  });
+/** A field's filter is one of: { text }, { in: [...] }, or { from, to } (either bound may be omitted). */
+function isValidFieldFilter(fieldFilter) {
+    if (
+        !fieldFilter ||
+        typeof fieldFilter !== "object" ||
+        Array.isArray(fieldFilter)
+    )
+        return false;
+    const properties = Object.keys(fieldFilter);
+    if (!properties.length) return false;
+    return properties.every((property) => {
+        if (property === "text")
+            return isStringUpTo(fieldFilter.text, MAX_TEXT_LENGTH);
+        if (property === "in") {
+            return (
+                Array.isArray(fieldFilter.in) &&
+                fieldFilter.in.length <= MAX_VALUES_PER_FIELD &&
+                fieldFilter.in.every((value) =>
+                    isStringUpTo(value, MAX_TEXT_LENGTH),
+                )
+            );
+        }
+        if (property === "from" || property === "to")
+            return isStringUpTo(fieldFilter[property], MAX_RANGE_LENGTH);
+        return false;
+    });
 }
 
 /** @returns {{ value: { name: string, filters: object, search: string } } | { error: string }} */
 export function validateSavedFilter(body) {
-  if (!body || typeof body !== "object") return { error: "Request body is required" };
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name || name.length > MAX_NAME) return { error: `Name must be 1-${MAX_NAME} characters` };
-  const filters = body.filters ?? {};
-  if (typeof filters !== "object" || Array.isArray(filters)) return { error: "filters must be an object" };
-  for (const [key, fv] of Object.entries(filters)) {
-    if (!FIELD_BY_KEY[key]) return { error: `Unknown filter field: ${key}` };
-    if (!validFilterValue(fv)) return { error: `Invalid filter value for ${key}` };
-  }
-  const search = body.search ?? "";
-  if (!isStr(search, MAX_TEXT)) return { error: `search must be at most ${MAX_TEXT} characters` };
-  return { value: { name, filters, search } };
+    if (!body || typeof body !== "object")
+        return { error: "Request body is required" };
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name || name.length > MAX_NAME_LENGTH)
+        return { error: `Name must be 1-${MAX_NAME_LENGTH} characters` };
+    const filters = body.filters ?? {};
+    if (typeof filters !== "object" || Array.isArray(filters))
+        return { error: "filters must be an object" };
+    for (const [fieldKey, fieldFilter] of Object.entries(filters)) {
+        if (!FIELD_BY_KEY[fieldKey])
+            return { error: `Unknown filter field: ${fieldKey}` };
+        if (!isValidFieldFilter(fieldFilter))
+            return { error: `Invalid filter value for ${fieldKey}` };
+    }
+    const search = body.search ?? "";
+    if (!isStringUpTo(search, MAX_TEXT_LENGTH))
+        return {
+            error: `search must be at most ${MAX_TEXT_LENGTH} characters`,
+        };
+    return { value: { name, filters, search } };
 }
