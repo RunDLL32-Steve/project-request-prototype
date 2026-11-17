@@ -1087,7 +1087,11 @@
                             );
                             deleteButton.onclick = () =>
                                 setDeleted(row, !rowDeleted);
-                            td.append(b, deleteButton);
+                            // One row of actions: the edit button and the delete/restore button never wrap apart.
+                            const rowActions = document.createElement("span");
+                            rowActions.className = "row-actions";
+                            rowActions.append(b, deleteButton);
+                            td.append(rowActions);
                             return;
                         }
                         // Deleted rows are read-only; Is Deleted? is changed only by the Delete/Restore buttons.

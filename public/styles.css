@@ -848,6 +848,16 @@ select option {
 .drawer-delete-btn {
     margin-left: auto;
 }
+/* The edit button and the delete/restore button always share one line, however narrow the column. */
+.row-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+.open-btn {
+    white-space: nowrap;
+}
 .row-delete-btn {
     background: transparent;
     color: var(
