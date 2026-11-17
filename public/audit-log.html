@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Audit Log</title>
+        <script src="/theme.js"></script>
+        <link rel="stylesheet" href="/styles.css" />
+    </head>
+    <body>
+        <header class="top">
+            <strong>Technology Requests — Audit Log</strong>
+            <div class="top-right">
+                <a href="/admin">Admin</a>
+                <a href="/">Request form</a>
+                <button
+                    type="button"
+                    id="themeToggle"
+                    class="theme-toggle"
+                    aria-label="Toggle light/dark mode"
+                ></button>
+            </div>
+        </header>
+        <main class="admin-wrap">
+            <p id="timeNote" class="audit-note"></p>
+            <div id="error" class="msg err" hidden></div>
+            <div class="grid-scroll">
+                <table class="grid" id="auditTable" aria-label="Audit log">
+                    <thead>
+                        <tr>
+                            <th>When</th>
+                            <th>User</th>
+                            <th>Action</th>
+                            <th>Project</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="auditRows"></tbody>
+                </table>
+            </div>
+            <p id="emptyMessage" class="audit-note" hidden>
+                No audit entries yet. Changes made from now on appear here.
+            </p>
+            <div class="audit-more">
+                <button type="button" id="loadMoreButton" hidden>
+                    Load more
+                </button>
+            </div>
+        </main>
+
+        <script type="module">
+            import { initAuth, api } from "/common.js";
+
+            const PAGE_SIZE = 50;
+            const errorBox = document.getElementById("error");
+            const auditRows = document.getElementById("auditRows");
+            const emptyMessage = document.getElementById("emptyMessage");
+            const loadMoreButton = document.getElementById("loadMoreButton");
+
+            const ACTION_LABELS = {
+                "request.created": "Request submitted",
+                "request.updated": "Record edited",
+                "savedFilter.saved": "Saved filter saved",
+                "savedFilter.deleted": "Saved filter deleted",
+            };
+
+            let fieldLabels = {}; // field key -> label, from /api/schema
+            let nextCursor = null;
+
+            /** Stored times are UTC ISO strings; this shows them in the viewer's local time zone. */
+            function formatLocalTime(utcIso) {
+                return new Date(utcIso).toLocaleString();
+            }
+
+            function formatUtcTime(utcIso) {
+                return utcIso.replace("T", " ").replace(/\.\d+Z$/, " UTC");
+            }
+
+            function formatValue(value) {
+                return value === null || value === undefined || value === ""
+                    ? "(blank)"
+                    : String(value);
+            }
+
+            function describeEntry(entry) {
+                switch (entry.action) {
+                    case "request.created":
+                        return entry.details?.projectName
+                            ? `Project name: ${entry.details.projectName}`
+                            : "";
+                    case "request.updated":
+                        return `${fieldLabels[entry.field] || entry.field}: ${formatValue(entry.oldValue)} → ${formatValue(entry.newValue)}`;
+                    case "savedFilter.saved":
+                        return entry.details?.replacedExisting
+                            ? `${entry.details.name} (replaced existing)`
+                            : entry.details?.name || "";
+                    case "savedFilter.deleted":
+                        return entry.details?.name || "";
+                    default:
+                        return "";
+                }
+            }
+
+            function appendCell(row, text, title) {
+                const cell = document.createElement("td");
+                cell.textContent = text;
+                if (title) cell.title = title;
+                row.append(cell);
+                return cell;
+            }
+
+            function renderEntry(entry) {
+                const row = document.createElement("tr");
+                const whenCell = document.createElement("td");
+                const time = document.createElement("time");
+                time.dateTime = entry.at;
+                time.textContent = formatLocalTime(entry.at);
+                time.title = formatUtcTime(entry.at);
+                whenCell.append(time);
+                row.append(whenCell);
+                appendCell(
+                    row,
+                    entry.actorName || entry.actorEmail,
+                    entry.actorEmail,
+                );
+                appendCell(row, ACTION_LABELS[entry.action] || entry.action);
+                appendCell(row, entry.projectId ? "#" + entry.projectId : "");
+                appendCell(row, describeEntry(entry));
+                auditRows.append(row);
+            }
+
+            async function loadPage() {
+                loadMoreButton.disabled = true;
+                try {
+                    const query = new URLSearchParams({ limit: PAGE_SIZE });
+                    if (nextCursor) query.set("cursor", nextCursor);
+                    const page = await api("/api/admin/audit-log?" + query);
+                    page.entries.forEach(renderEntry);
+                    nextCursor = page.nextCursor;
+                    loadMoreButton.hidden = !nextCursor;
+                    emptyMessage.hidden = auditRows.children.length > 0;
+                    errorBox.hidden = true;
+                } catch (e) {
+                    errorBox.textContent =
+                        "Could not load the audit log: " + e.message;
+                    errorBox.hidden = false;
+                } finally {
+                    loadMoreButton.disabled = false;
+                }
+            }
+
+            async function start() {
+                // Sign-in returns to /admin, which is already a registered redirect URI.
+                await initAuth({ redirectPath: "/admin" });
+                const timeZone =
+                    Intl.DateTimeFormat().resolvedOptions().timeZone;
+                document.getElementById("timeNote").textContent =
+                    `Times are shown in your local time zone (${timeZone}). Hover a time to see it in UTC.`;
+                try {
+                    const schema = await api("/api/schema");
+                    fieldLabels = Object.fromEntries(
+                        schema.fields.map((field) => [field.key, field.label]),
+                    );
+                } catch {
+                    // Labels are a nicety; fall back to raw field keys.
+                }
+                loadMoreButton.addEventListener("click", loadPage);
+                await loadPage();
+            }
+
+            start().catch((e) => {
+                errorBox.textContent = e.message;
+                errorBox.hidden = false;
+            });
+        </script>
+    </body>
+</html>

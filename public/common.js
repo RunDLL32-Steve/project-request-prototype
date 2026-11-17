@@ -16,7 +16,12 @@ function loadScript(src) {
     });
 }
 
-export async function initAuth() {
+/**
+ * @param {{ redirectPath?: string }} [options] The path Entra sends the user back to after
+ *   sign-in. Defaults to the current page; a page whose path is not registered as a redirect
+ *   URI in Entra passes one that is (e.g. "/admin").
+ */
+export async function initAuth({ redirectPath } = {}) {
     authConfig = await (await fetch("/api/auth/config")).json();
     if (authConfig.env && authConfig.env !== "prod") {
         const b = document.createElement("div");
@@ -35,7 +40,9 @@ export async function initAuth() {
         auth: {
             clientId: authConfig.clientId,
             authority: `https://login.microsoftonline.com/${authConfig.tenantId}`,
-            redirectUri: window.location.origin + window.location.pathname,
+            redirectUri:
+                window.location.origin +
+                (redirectPath ?? window.location.pathname),
         },
         cache: { cacheLocation: "sessionStorage" },
     });

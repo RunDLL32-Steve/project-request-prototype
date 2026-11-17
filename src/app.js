@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { createAuth } from "./auth.js";
+import { AUDIT_ACTIONS, buildAuditEntry } from "./audit.js";
 import { validateSavedFilter, MAX_SAVED } from "./saved-filters.js";
 import { FIELDS, FIELD_BY_KEY, SUBMITTER_KEYS, coerce } from "./schema.js";
 
@@ -11,6 +12,12 @@ const publicDir = path.join(
     "..",
     "public",
 );
+
+const AUDIT_DEFAULT_PAGE_SIZE = 50;
+const AUDIT_MAX_PAGE_SIZE = 200;
+
+/** The signed-in user, as recorded on audit entries. */
+const actorOf = (req) => ({ name: req.user.name, email: req.user.email });
 
 export function createApp({ config, store, mailer, log = console }) {
     const app = express();
@@ -58,7 +65,7 @@ export function createApp({ config, store, mailer, log = console }) {
                     .json({ error: errors.join("; "), errors });
             values.submittedAt = new Date().toISOString();
 
-            const row = await store.create(values);
+            const row = await store.create(values, actorOf(req));
 
             // Email is best-effort: the request is already saved, so a mail failure must not lose it.
             const onFail = (e) =>
@@ -122,11 +129,15 @@ export function createApp({ config, store, mailer, log = console }) {
                     changes[key] = r.value;
                 }
                 if (changes.status === null) changes.status = "New";
-                const row = await store.update(id, changes);
+                const row = await store.update(id, changes, actorOf(req));
                 if (!row)
                     return res.status(404).json({ error: "Project not found" });
                 res.json({ row });
             } catch (e) {
+                if (e.name === "EditConflict")
+                    return res.status(409).json({
+                        error: "This record was changed by someone else. Reload and try again.",
+                    });
                 next(e);
             }
         },
@@ -204,11 +215,21 @@ export function createApp({ config, store, mailer, log = console }) {
                         ...validation.value,
                         id: randomUUID(),
                     });
-                await store.setPrefs(req.user.id, {
-                    ...existingPrefs,
-                    savedFilters,
-                    email: req.user.email,
-                });
+                const auditEntry = buildAuditEntry(
+                    actorOf(req),
+                    AUDIT_ACTIONS.savedFilterSaved,
+                    {
+                        details: {
+                            name: validation.value.name,
+                            replacedExisting: sameNameIndex >= 0,
+                        },
+                    },
+                );
+                await store.setPrefs(
+                    req.user.id,
+                    { ...existingPrefs, savedFilters, email: req.user.email },
+                    [auditEntry],
+                );
                 res.json({ savedFilters });
             } catch (e) {
                 next(e);
@@ -230,13 +251,57 @@ export function createApp({ config, store, mailer, log = console }) {
                     return res
                         .status(404)
                         .json({ error: "Saved filter not found" });
-                await store.setPrefs(req.user.id, {
-                    ...existingPrefs,
-                    savedFilters: remainingFilters,
-                    email: req.user.email,
-                });
+                const deletedFilter = currentFilters.find(
+                    (savedFilter) => savedFilter.id === req.params.id,
+                );
+                const auditEntry = buildAuditEntry(
+                    actorOf(req),
+                    AUDIT_ACTIONS.savedFilterDeleted,
+                    { details: { name: deletedFilter.name } },
+                );
+                await store.setPrefs(
+                    req.user.id,
+                    {
+                        ...existingPrefs,
+                        savedFilters: remainingFilters,
+                        email: req.user.email,
+                    },
+                    [auditEntry],
+                );
                 res.json({ savedFilters: remainingFilters });
             } catch (e) {
+                next(e);
+            }
+        },
+    );
+
+    // Audit log: every save, edit and delete with who made it and when (UTC), newest first.
+    app.get(
+        "/api/admin/audit-log",
+        auth.requireAdmin,
+        async (req, res, next) => {
+            try {
+                const limit =
+                    req.query.limit === undefined
+                        ? AUDIT_DEFAULT_PAGE_SIZE
+                        : Number(req.query.limit);
+                if (
+                    !Number.isInteger(limit) ||
+                    limit < 1 ||
+                    limit > AUDIT_MAX_PAGE_SIZE
+                )
+                    return res.status(400).json({
+                        error: `limit must be a whole number from 1 to ${AUDIT_MAX_PAGE_SIZE}`,
+                    });
+                res.json(
+                    await store.listAudit({
+                        limit,
+                        cursor: req.query.cursor ?? null,
+                    }),
+                );
+            } catch (e) {
+                if (e.name === "InvalidCursor")
+                    return res.status(400).json({ error: "Invalid cursor" });
                 next(e);
             }
         },
@@ -245,6 +310,9 @@ export function createApp({ config, store, mailer, log = console }) {
     app.use(express.static(publicDir));
     app.get("/admin", (req, res) =>
         res.sendFile(path.join(publicDir, "admin.html")),
+    );
+    app.get("/audit-log", (req, res) =>
+        res.sendFile(path.join(publicDir, "audit-log.html")),
     );
 
     app.use((err, req, res, next) => {

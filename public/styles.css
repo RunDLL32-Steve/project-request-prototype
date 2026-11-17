@@ -512,6 +512,29 @@ table.grid {
     color: var(--muted);
     margin: 8px 0 3px;
 }
+/* Audit log page (audit-log.html). */
+.audit-note {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0 0 10px;
+}
+.audit-more {
+    margin: 12px 0;
+    text-align: center;
+}
+#auditTable {
+    width: 100%;
+}
+#auditTable td {
+    padding: 8px 10px;
+    vertical-align: top;
+}
+#auditTable td:last-child {
+    overflow-wrap: anywhere;
+}
+#auditTable time {
+    white-space: nowrap;
+}
 /* Saved filters popup (admin.html renderSavedFiltersPopup). */
 .saved-wrap {
     position: relative;

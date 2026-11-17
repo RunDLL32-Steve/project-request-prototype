@@ -15,9 +15,10 @@ export const config = {
     userRole: env.ENTRA_USER_ROLE || "Default",
     ddbTable: env.DDB_TABLE || null,
     prefsTable: env.PREFS_TABLE || null,
+    auditTable: env.AUDIT_TABLE || null,
     region: env.AWS_REGION || "us-east-1",
     notifyTransport: (env.NOTIFY_TRANSPORT || "none").toLowerCase(),
-    notifyTo: env.NOTIFY_TO || "steven.millard@stsaviationgroup.com",
+    notifyTo: env.NOTIFY_TO || "rob.wire@stsaviationgroup.com",
     notifyFrom: env.NOTIFY_FROM,
     notifyFromName: env.NOTIFY_FROM_NAME || "STS Technology Project Request",
     // SAFETY RAIL: when true, every email goes ONLY to notifyTestRecipient (fail-closed if unset).

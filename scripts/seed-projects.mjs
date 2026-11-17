@@ -3,7 +3,7 @@
 //   node scripts/seed-projects.mjs <projects.json>                              # DRY RUN: map + validate, write nothing
 //   node scripts/seed-projects.mjs <projects.json> --apply --table <name> [--region us-east-1]
 //
-// Uses the standard AWS credential chain (e.g. AWS_PROFILE=AIChatbotProd). Safe to re-run: each row is written
+// Uses the standard AWS credential chain (sign in first with `aws login`). Safe to re-run: each row is written
 // with attribute_not_exists(projectId), so existing projects are never overwritten, and the ID counter only
 // ever moves up. Prints a validation report; --apply refuses to run if any value fails validation.
 import fs from "node:fs";

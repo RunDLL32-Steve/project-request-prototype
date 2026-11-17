@@ -7,7 +7,7 @@ Parameters:
         { Type: String, Default: nonprod, AllowedValues: [nonprod, prod] }
     EntraTenantId: { Type: String }
     EntraClientId: { Type: String }
-    NotifyTo: { Type: String, Default: steven.millard@stsaviationgroup.com }
+    NotifyTo: { Type: String, Default: rob.wire@stsaviationgroup.com }
     NotifyTransport:
         { Type: String, Default: smtp, AllowedValues: [none, smtp] }
     # Safety rail: while "true", every notification goes ONLY to NotifyTestRecipient. Leave true outside prod.
@@ -64,6 +64,25 @@ Resources:
                 { PointInTimeRecoveryEnabled: true }
             SSESpecification: { SSEEnabled: true }
 
+    # Append-only audit log: who saved, edited or deleted what, and when (UTC). Every item shares
+    # one partition key and sorts by "<UTC ISO time>#<id>", so a descending Query lists newest first.
+    # Each change is written in the same DynamoDB transaction as its audit entry.
+    AuditLogTable:
+        Type: AWS::DynamoDB::Table
+        DeletionPolicy: Retain
+        UpdateReplacePolicy: Retain
+        Properties:
+            BillingMode: PAY_PER_REQUEST
+            AttributeDefinitions:
+                - { AttributeName: auditPartition, AttributeType: S }
+                - { AttributeName: sortKey, AttributeType: S }
+            KeySchema:
+                - { AttributeName: auditPartition, KeyType: HASH }
+                - { AttributeName: sortKey, KeyType: RANGE }
+            PointInTimeRecoverySpecification:
+                { PointInTimeRecoveryEnabled: true }
+            SSESpecification: { SSEEnabled: true }
+
     AppFunction:
         Type: AWS::Serverless::Function
         Properties:
@@ -75,6 +94,7 @@ Resources:
                     APP_ENV: !Ref Environment
                     DDB_TABLE: !Ref RequestsTable
                     PREFS_TABLE: !Ref UserPrefsTable
+                    AUDIT_TABLE: !Ref AuditLogTable
                     ENTRA_TENANT_ID: !Ref EntraTenantId
                     ENTRA_CLIENT_ID: !Ref EntraClientId
                     NOTIFY_TO: !Ref NotifyTo
@@ -90,6 +110,13 @@ Resources:
             Policies:
                 - DynamoDBCrudPolicy: { TableName: !Ref RequestsTable }
                 - DynamoDBCrudPolicy: { TableName: !Ref UserPrefsTable }
+                # Audit log is append-only: the app can add and read entries, never change or delete them.
+                - Statement:
+                      - Effect: Allow
+                        Action:
+                            - dynamodb:PutItem
+                            - dynamodb:Query
+                        Resource: !GetAtt AuditLogTable.Arn
                 - Statement:
                       - Effect: Allow
                         Action: secretsmanager:GetSecretValue
@@ -153,3 +180,5 @@ Outputs:
         Value: !Ref RequestsTable
     UserPrefsTableName:
         Value: !Ref UserPrefsTable
+    AuditLogTableName:
+        Value: !Ref AuditLogTable
