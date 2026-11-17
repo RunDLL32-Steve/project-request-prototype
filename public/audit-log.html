@@ -60,6 +60,8 @@
             const ACTION_LABELS = {
                 "request.created": "Request submitted",
                 "request.updated": "Record edited",
+                "request.deleted": "Record deleted",
+                "request.restored": "Record restored",
                 "savedFilter.saved": "Saved filter saved",
                 "savedFilter.deleted": "Saved filter deleted",
             };
@@ -90,6 +92,10 @@
                             : "";
                     case "request.updated":
                         return `${fieldLabels[entry.field] || entry.field}: ${formatValue(entry.oldValue)} → ${formatValue(entry.newValue)}`;
+                    case "request.deleted":
+                        return "Marked as deleted";
+                    case "request.restored":
+                        return "Restored";
                     case "savedFilter.saved":
                         return entry.details?.replacedExisting
                             ? `${entry.details.name} (replaced existing)`

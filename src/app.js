@@ -129,11 +129,14 @@ export function createApp({ config, store, mailer, log = console }) {
                     changes[key] = r.value;
                 }
                 if (changes.status === null) changes.status = "New";
+                if (changes.isDeleted === null) changes.isDeleted = "No";
                 const row = await store.update(id, changes, actorOf(req));
                 if (!row)
                     return res.status(404).json({ error: "Project not found" });
                 res.json({ row });
             } catch (e) {
+                if (e.name === "RecordDeleted")
+                    return res.status(409).json({ error: e.message });
                 if (e.name === "EditConflict")
                     return res.status(409).json({
                         error: "This record was changed by someone else. Reload and try again.",

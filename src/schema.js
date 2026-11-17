@@ -265,6 +265,16 @@ export const FIELDS = [
         source: "system",
         readOnly: true,
     },
+    // Soft delete flag. A row with no value counts as "No", so rows created before this field existed
+    // are unaffected. The admin page controls it with Delete / Restore buttons.
+    {
+        key: "isDeleted",
+        label: "Is Deleted?",
+        type: "select",
+        options: ["No", "Yes"],
+        defaultValue: "No",
+        source: "admin",
+    },
 ];
 
 export const FIELD_BY_KEY = Object.fromEntries(FIELDS.map((f) => [f.key, f]));

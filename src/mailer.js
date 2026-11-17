@@ -6,7 +6,9 @@ import { FIELDS } from "./schema.js";
 export function buildMessage(row) {
     const subject = `New Technology Project Request - ${row.executiveSponsor} - ${row.projectName}`;
     const fmt = (v) => (v === null || v === undefined ? "" : String(v));
-    const body = FIELDS.filter((f) => f.key !== "submittedAt")
+    const body = FIELDS.filter(
+        (f) => f.key !== "submittedAt" && f.key !== "isDeleted",
+    )
         .map(
             (f) =>
                 `${f.label}: ${fmt(row[f.key]).replace(/\s*\r?\n\s*/g, " ")}`,

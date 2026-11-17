@@ -17,10 +17,12 @@ import {
     TransactWriteCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { FIELDS } from "./schema.js";
+import { assertEditable, withDefaults } from "./request-rules.js";
 import {
     AUDIT_ACTIONS,
     AUDIT_PARTITION,
     buildAuditEntry,
+    buildRequestChangeEntry,
     decodeCursor,
     diffChanges,
     encodeCursor,
@@ -35,15 +37,23 @@ const MAX_EDIT_ATTEMPTS = 3;
 
 /** A new request row: every field present, hidden fields blank, status "New". */
 export function blankRow() {
-    const row = Object.fromEntries(FIELDS.map((f) => [f.key, null]));
+    const row = Object.fromEntries(
+        FIELDS.map((f) => [f.key, f.defaultValue ?? null]),
+    );
     row.status = "New";
     return row;
 }
 
 const isTransactionCancelled = (error) =>
     error.name === "TransactionCanceledException";
-const failedItsCondition = (error, itemIndex) =>
-    error.CancellationReasons?.[itemIndex]?.Code === "ConditionalCheckFailed";
+// Worth re-reading the row and trying again: the row changed since we read it, or another
+// transaction was touching it at the same moment.
+const isRetryableCancellation = (error) =>
+    isTransactionCancelled(error) &&
+    (error.CancellationReasons?.[0]?.Code === "ConditionalCheckFailed" ||
+        error.CancellationReasons?.some(
+            (reason) => reason.Code === "TransactionConflict",
+        ));
 
 /** A Put of one audit entry into the audit table, for use inside a transaction. */
 const auditPut = (auditTable, entry) => ({
@@ -132,7 +142,8 @@ export function createDdbStore({
                 );
                 const row = read.Item;
                 if (!row) return null;
-                const diffs = diffChanges(row, changes);
+                assertEditable(row, changes);
+                const diffs = diffChanges(withDefaults(row), changes);
                 if (!diffs.length) return row;
 
                 // Commit only if each changed field still holds the value we read, so the
@@ -152,11 +163,19 @@ export function createDdbStore({
                         conditions.push(`attribute_not_exists(#k${i})`);
                     }
                 });
+                // A change that is not itself a delete/restore must also still find the row in the
+                // state we checked (a concurrent delete cancels it, so a deleted row is never edited).
+                if (!diffs.some((diff) => diff.field === "isDeleted")) {
+                    names["#del"] = "isDeleted";
+                    if ("isDeleted" in row) {
+                        values[":del"] = row.isDeleted;
+                        conditions.push("#del = :del");
+                    } else {
+                        conditions.push("attribute_not_exists(#del)");
+                    }
+                }
                 const entries = diffs.map((diff) =>
-                    buildAuditEntry(actor, AUDIT_ACTIONS.requestUpdated, {
-                        projectId,
-                        ...diff,
-                    }),
+                    buildRequestChangeEntry(actor, projectId, diff),
                 );
                 try {
                     await doc.send(
@@ -182,10 +201,7 @@ export function createDdbStore({
                     );
                     return { ...row, ...changes };
                 } catch (e) {
-                    if (!(
-                        isTransactionCancelled(e) && failedItsCondition(e, 0)
-                    ))
-                        throw e;
+                    if (!isRetryableCancellation(e)) throw e;
                 }
             }
             throw Object.assign(
@@ -304,16 +320,14 @@ export function createFileStore(dir) {
                 const d = await readJson(file, { lastId: 0, rows: [] });
                 const row = d.rows.find((r) => r.projectId === projectId);
                 if (!row) return null;
-                const diffs = diffChanges(row, changes);
+                assertEditable(row, changes);
+                const diffs = diffChanges(withDefaults(row), changes);
                 if (!diffs.length) return row;
                 Object.assign(row, changes);
                 await writeJson(file, d);
                 await appendAudit(
                     diffs.map((diff) =>
-                        buildAuditEntry(actor, AUDIT_ACTIONS.requestUpdated, {
-                            projectId,
-                            ...diff,
-                        }),
+                        buildRequestChangeEntry(actor, projectId, diff),
                     ),
                 );
                 return row;

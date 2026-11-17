@@ -831,3 +831,42 @@ select option {
     outline: 2px solid var(--focus);
     outline-offset: -2px;
 }
+
+/* Soft delete (admin.html). */
+.deleted-banner {
+    background: var(--warn-bg);
+    color: #fff;
+    text-align: center;
+    font-weight: 800;
+    letter-spacing: 0.25em;
+    padding: 10px 12px;
+    font-size: 15px;
+}
+.deleted-banner[hidden] {
+    display: none;
+}
+.drawer-delete-btn {
+    margin-left: auto;
+}
+.row-delete-btn {
+    background: transparent;
+    color: var(
+        --err
+    ); /* the delete trash can is red; the restore arrow uses the same colour */
+    padding: 2px 4px;
+    font-size: 14px;
+    line-height: 1;
+    vertical-align: middle;
+}
+.row-delete-btn.is-restore {
+    color: var(--text); /* restore is the safe action, so it stays neutral */
+}
+.row-delete-btn svg {
+    display: block;
+}
+.row-delete-btn:hover {
+    opacity: 0.7;
+}
+.grid tbody tr.deleted td {
+    background: color-mix(in srgb, var(--err) 14%, var(--card));
+}

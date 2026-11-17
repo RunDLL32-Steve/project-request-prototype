@@ -92,8 +92,16 @@
             aria-modal="true"
             aria-labelledby="drawerTitle"
         >
+            <div id="deletedBanner" class="deleted-banner" role="alert" hidden>
+                DELETED
+            </div>
             <div class="drawer-head">
                 <h2 id="drawerTitle"></h2>
+                <button
+                    type="button"
+                    id="drawerDeleteBtn"
+                    class="btn-secondary drawer-delete-btn"
+                ></button>
                 <button
                     type="button"
                     id="drawerClose"
@@ -168,6 +176,7 @@
                         "workNew",
                         "businessSegment",
                         "riskToCompletionDate",
+                        "isDeleted",
                         "startDate",
                         "estCompletionDate",
                         "originalTargetCompletion",
@@ -210,7 +219,6 @@
             let filters = {}; // key -> { text } | { in: [values] } | { from, to }
             let savedFilters = []; // this admin's saved views: [{ id, name, filters, search }]
             let updateSaveButtonState = () => {};
-            let multiSelectClearers = []; // one clearSelection() per multi-select, called by clearAll()
             let order = []; // field keys in the admin's preferred column order (saved per admin)
             let defaultOrder = [];
             let dragKey = null;
@@ -229,8 +237,70 @@
                 errBox.hidden = true;
             };
             const isNum = (f) => f.type === "money" || f.type === "number";
+            const isRowDeleted = (row) => row.isDeleted === "Yes";
 
-            function makeInput(f, value) {
+            /** A trash-can icon drawn in the button's text colour (an emoji would ignore CSS colour). */
+            function trashIcon() {
+                const svgNamespace = "http://www.w3.org/2000/svg";
+                const svg = document.createElementNS(svgNamespace, "svg");
+                svg.setAttribute("viewBox", "0 0 24 24");
+                svg.setAttribute("width", "16");
+                svg.setAttribute("height", "16");
+                svg.setAttribute("fill", "none");
+                svg.setAttribute("stroke", "currentColor");
+                svg.setAttribute("stroke-width", "2");
+                svg.setAttribute("stroke-linecap", "round");
+                svg.setAttribute("stroke-linejoin", "round");
+                svg.setAttribute("aria-hidden", "true");
+                for (const pathData of [
+                    "M3 6h18",
+                    "M8 6V4h8v2",
+                    "M19 6l-1 14H6L5 6",
+                    "M10 11v6",
+                    "M14 11v6",
+                ]) {
+                    const path = document.createElementNS(svgNamespace, "path");
+                    path.setAttribute("d", pathData);
+                    svg.append(path);
+                }
+                return svg;
+            }
+
+            /** Filters that are on when the page opens, e.g. Is Deleted? = No (from each field's defaultValue). */
+            function defaultFilters() {
+                return Object.fromEntries(
+                    fields
+                        .filter(
+                            (f) =>
+                                f.type === "select" &&
+                                f.defaultValue !== undefined,
+                        )
+                        .map((f) => [f.key, { in: [f.defaultValue] }]),
+                );
+            }
+
+            /** How many filters differ from the defaults (the defaults themselves do not count). */
+            function countNonDefaultFilters() {
+                const defaults = defaultFilters();
+                const keys = new Set([
+                    ...Object.keys(filters),
+                    ...Object.keys(defaults),
+                ]);
+                return [...keys].filter(
+                    (key) =>
+                        JSON.stringify(filters[key]) !==
+                        JSON.stringify(defaults[key]),
+                ).length;
+            }
+
+            /** A blank value counts as the field's default (a row saved before the field existed). */
+            const valueOrDefault = (field, value) =>
+                value === null || value === undefined || value === ""
+                    ? (field.defaultValue ?? value)
+                    : value;
+
+            /** `locked` shows the value but disables editing (deleted rows; the Delete/Restore-only field). */
+            function makeInput(f, value, locked = false) {
                 let el;
                 if (f.type === "select") {
                     el = document.createElement("select");
@@ -253,7 +323,7 @@
                     if (f.type === "money") el.step = "0.01";
                 }
                 el.value = value ?? "";
-                if (f.readOnly) {
+                if (f.readOnly || locked) {
                     el.readOnly = true;
                     el.disabled = true;
                 }
@@ -285,6 +355,34 @@
                 }
             }
 
+            /** Soft delete or restore one request. Deleted requests are read-only until restored. */
+            async function setDeleted(row, shouldDelete) {
+                const label = `Project ${row.projectId}${row.projectName ? " — " + row.projectName : ""}`;
+                if (
+                    shouldDelete &&
+                    !confirm(`Delete ${label}? You can restore it later.`)
+                )
+                    return;
+                try {
+                    const { row: updated } = await api(
+                        `/api/admin/requests/${row.projectId}`,
+                        {
+                            method: "PATCH",
+                            body: { isDeleted: shouldDelete ? "Yes" : "No" },
+                        },
+                    );
+                    Object.assign(row, updated);
+                    clearFail();
+                } catch (e) {
+                    fail(
+                        `${label}: could not ${shouldDelete ? "delete" : "restore"}: ${e.message}`,
+                    );
+                    return;
+                }
+                if (openId === row.projectId) openDrawer(row.projectId); // refresh banner and locked fields
+                render();
+            }
+
             // ---- Filtering (runs over ALL rows, before pagination) ----
             function setFilter(key, patch) {
                 const next = { ...(filters[key] || {}), ...patch };
@@ -309,7 +407,7 @@
                     return false;
                 for (const [key, fv] of Object.entries(filters)) {
                     const f = byKey[key],
-                        v = row[key];
+                        v = valueOrDefault(f, row[key]);
                     if (fv.text !== undefined) {
                         if (
                             !String(v ?? "")
@@ -361,7 +459,7 @@
                 toggleButton.focus();
             });
 
-            /** Builds one multi-select for a "select" field. Returns its element plus functions to set or clear the selection. */
+            /** Builds one multi-select for a "select" field. Returns its element plus a function to set the selection. */
             function buildMultiSelect(field) {
                 const selectedOptions = new Set();
                 const container = document.createElement("div");
@@ -487,22 +585,11 @@
                         searchInput.focus();
                     }
                 });
-                function clearSelection() {
-                    selectedOptions.clear();
-                    optionRows.forEach(
-                        (optionRow) => (optionRow.checkbox.checked = false),
-                    );
-                    searchInput.value = "";
-                    filterOptionsBySearch();
-                    renderChips();
-                    closeAllMultiSelectPopups();
-                }
                 renderChips();
-                return { element: container, clearSelection, setSelection };
+                return { element: container, setSelection };
             }
 
             function buildFilterPanel() {
-                multiSelectClearers = [];
                 filterPanel.replaceChildren();
                 const grid = document.createElement("div");
                 grid.className = "fgrid";
@@ -522,7 +609,6 @@
                         multiSelect.setSelection(
                             (filters[f.key] || {}).in || [],
                         );
-                        multiSelectClearers.push(multiSelect.clearSelection);
                         wrap.append(multiSelect.element);
                     } else if (f.type === "date" || isNum(f)) {
                         const range = document.createElement("div");
@@ -562,9 +648,20 @@
             // ---- Saved filters (per user, for quick switching between views; never applied on load) ----
             function hasActiveFilters() {
                 return (
-                    Object.keys(filters).length > 0 ||
-                    search.value.trim() !== ""
+                    countNonDefaultFilters() > 0 || search.value.trim() !== ""
                 );
+            }
+
+            /**
+             * The filters to store. A field that has a default but no filter right now means "show all",
+             * so it is saved as every option: applying a saved view that lacks the field gets the default.
+             */
+            function filtersForSaving() {
+                const toSave = JSON.parse(JSON.stringify(filters));
+                for (const key of Object.keys(defaultFilters()))
+                    if (!toSave[key])
+                        toSave[key] = { in: [...byKey[key].options] };
+                return toSave;
             }
 
             function closeSavedFiltersPopup() {
@@ -573,7 +670,10 @@
             }
 
             function applySavedFilter(savedFilter) {
-                filters = JSON.parse(JSON.stringify(savedFilter.filters || {}));
+                filters = {
+                    ...defaultFilters(),
+                    ...JSON.parse(JSON.stringify(savedFilter.filters || {})),
+                };
                 search.value = savedFilter.search || "";
                 page = 1;
                 buildFilterPanel(); // controls are hydrated from `filters`
@@ -600,7 +700,11 @@
                 try {
                     const response = await api("/api/admin/saved-filters", {
                         method: "POST",
-                        body: { name, filters, search: search.value.trim() },
+                        body: {
+                            name,
+                            filters: filtersForSaving(),
+                            search: search.value.trim(),
+                        },
                     });
                     savedFilters = response.savedFilters;
                     document.getElementById("saveState").textContent =
@@ -724,15 +828,10 @@
             });
 
             function clearAll() {
-                filters = {};
+                filters = defaultFilters();
                 search.value = "";
-                filterPanel
-                    .querySelectorAll("input:not([type=checkbox])")
-                    .forEach((input) => (input.value = ""));
-                multiSelectClearers.forEach((clearSelection) =>
-                    clearSelection(),
-                );
                 page = 1;
+                buildFilterPanel(); // controls are hydrated from `filters`
                 render();
             }
 
@@ -834,7 +933,7 @@
                     .map((k) => byKey[k]);
                 resetColsBtn.hidden = order.join() === defaultOrder.join();
                 const view = rows.filter((r) => matches(r, q));
-                const activeCount = Object.keys(filters).length;
+                const activeCount = countNonDefaultFilters();
                 filtersBtn.textContent = activeCount
                     ? "Filters (" + activeCount + ")"
                     : "Filters";
@@ -956,6 +1055,8 @@
                 const body = grid.createTBody();
                 for (const row of pageRows) {
                     const tr = body.insertRow();
+                    const rowDeleted = isRowDeleted(row);
+                    tr.classList.toggle("deleted", rowDeleted);
                     cols.forEach((f, i) => {
                         const td = tr.insertCell();
                         if (isNum(f)) td.className = "num";
@@ -967,11 +1068,32 @@
                             b.textContent = `✎ ${row.projectId}`;
                             b.title = "Open all fields";
                             b.onclick = () => openDrawer(row.projectId);
-                            td.append(b);
+                            const deleteButton =
+                                document.createElement("button");
+                            deleteButton.type = "button";
+                            deleteButton.className = rowDeleted
+                                ? "row-delete-btn is-restore"
+                                : "row-delete-btn";
+                            if (rowDeleted) deleteButton.textContent = "↩";
+                            else deleteButton.append(trashIcon());
+                            deleteButton.title = rowDeleted
+                                ? "Restore this request"
+                                : "Delete this request (can be restored)";
+                            deleteButton.setAttribute(
+                                "aria-label",
+                                (rowDeleted ? "Restore" : "Delete") +
+                                    " project " +
+                                    row.projectId,
+                            );
+                            deleteButton.onclick = () =>
+                                setDeleted(row, !rowDeleted);
+                            td.append(b, deleteButton);
                             return;
                         }
-                        const el = makeInput(f, row[f.key]);
-                        if (!f.readOnly)
+                        // Deleted rows are read-only; Is Deleted? is changed only by the Delete/Restore buttons.
+                        const locked = rowDeleted || f.key === "isDeleted";
+                        const el = makeInput(f, row[f.key], locked);
+                        if (!f.readOnly && !locked)
                             el.addEventListener("change", () =>
                                 saveField(row, f, el, td),
                             );
@@ -1041,6 +1163,12 @@
                 const row = rows.find((r) => r.projectId === id);
                 if (!row) return;
                 openId = id;
+                const rowDeleted = isRowDeleted(row);
+                document.getElementById("deletedBanner").hidden = !rowDeleted;
+                const drawerDeleteBtn =
+                    document.getElementById("drawerDeleteBtn");
+                drawerDeleteBtn.textContent = rowDeleted ? "Restore" : "Delete";
+                drawerDeleteBtn.onclick = () => setDeleted(row, !rowDeleted);
                 document.getElementById("drawerTitle").textContent =
                     `Project ${row.projectId}${row.projectName ? " — " + row.projectName : ""}`;
                 const body = document.getElementById("drawerBody");
@@ -1060,10 +1188,11 @@
                             "dfield" + (f.type === "longtext" ? " wide" : "");
                         const label = document.createElement("label");
                         label.textContent = f.label;
-                        const el = makeInput(f, row[k]);
+                        const locked = rowDeleted || k === "isDeleted";
+                        const el = makeInput(f, row[k], locked);
                         el.id = "d_" + k;
                         label.htmlFor = el.id;
-                        if (!f.readOnly)
+                        if (!f.readOnly && !locked)
                             el.addEventListener("change", () =>
                                 saveField(row, f, el, wrap),
                             );
@@ -1106,6 +1235,7 @@
                 fields = (await api("/api/schema")).fields;
                 byKey = Object.fromEntries(fields.map((f) => [f.key, f]));
                 rows = (await api("/api/admin/requests")).rows;
+                filters = defaultFilters(); // e.g. Is Deleted? = No
                 defaultOrder = fields.map((f) => f.key);
                 order = defaultOrder.slice();
                 try {

@@ -11,10 +11,18 @@ integrations, process automation, data analytics).
   date/number ranges, and multi-select dropdowns for the choice fields (tick several values to match any of them).
   **Saved filters** keeps named filter sets per admin for quick switching between views (nothing is applied on page
   load; up to 25 per admin; saving an existing name replaces it).
+  Column order and saved filters belong to the signed-in admin only: one admin's changes never affect another's, and
+  nobody can see or delete another admin's saved filters. (Rows per page and the light/dark theme are remembered per
+  browser.) Running locally with dev auth, everyone is the same dev user, so they share one set.
+  **Soft delete:** the trash button on a row (or **Delete** in the detail panel) hides a request without erasing it.
+  The **Is Deleted?** filter defaults to **No**, so deleted requests are hidden until you tick **Yes**. A deleted
+  request shows a red **DELETED** banner across the top of its detail panel and is read-only (greyed out in the grid)
+  until you **Restore** it (the ↩ button or **Restore** in the panel). Requests are never hard-deleted and their
+  Project IDs are never reused. Clear all returns the filters to that default (Is Deleted? = No).
 - **`/audit-log` — audit log** (admin only, linked from the admin header). Every request submission, field edit
-  (old → new value) and saved-filter save/delete, with who made it and when. Stored in UTC, shown in your local
+  (old → new value), request delete/restore, and saved-filter save/delete, with who made it and when. Stored in UTC, shown in your local
   time zone (hover a time for UTC). Newest first, 50 per page. Each change is written in the same DynamoDB
-  transaction as its audit entry, so the log can never miss a change or record one that didn't happen. The log
+  transaction as its audit entry, so a request change is never saved without its audit entry (or the reverse). The log
   starts empty at deploy time (nothing earlier was recorded) and column-order changes are not logged.
 - **On submit:** the request is saved with the next auto-numbered Project ID (1, 2, 3, ...), `Status = New`,
   and all hidden fields blank; then a notification email is sent (see [Email](#email)).
@@ -247,17 +255,23 @@ Three DynamoDB tables (local files with the same shapes in `data/`):
 
 - **Requests** — one item per request, keyed by `projectId`. Item `projectId = 0` is the ID counter and is hidden
   from the admin list.
-- **Preferences** — one item per admin, keyed by `userId` (their email): `columnOrder` and `savedFilters`
+- **Preferences** — one item per admin, keyed by `userId` (their Entra object ID; the email when running locally
+  with dev auth): `columnOrder` and `savedFilters`
   (`[{ id, name, filters, search }]`, where `filters` maps a field key to `{ text }`, `{ in: [...] }` or
   `{ from, to }`).
 - **Audit log** — append-only. Partition key `auditPartition` (always `AUDIT`), sort key `sortKey`
   (`<UTC ISO time>#<id>`, so a descending query is newest first). Each entry has `id`, `at` (UTC ISO), `actorName`,
-  `actorEmail`, `action` (`request.created`, `request.updated`, `savedFilter.saved`, `savedFilter.deleted`) and
+  `actorEmail`, `action` (`request.created`, `request.updated`, `request.deleted`, `request.restored`,
+  `savedFilter.saved`, `savedFilter.deleted`) and
   `projectId` / `field` / `oldValue` / `newValue` / `details` as relevant. A request edit writes one entry per field
   that actually changed. Saving a value that is already there writes nothing.
 
 Every change is written in one DynamoDB transaction together with its audit entries, so they succeed or fail
 together. A creation increments the ID counter first (a failure after that only leaves a gap in the Project IDs).
+
+`isDeleted` (label **Is Deleted?**, `No`/`Yes`) is the soft-delete flag on a request. A row with no value, such as
+one created before the field existed, counts as `No`, so no migration is needed. It is never included in the
+notification email.
 
 Request fields (in `src/schema.js`):
 
@@ -306,17 +320,17 @@ together: the server refuses to start with `DDB_TABLE` set but `PREFS_TABLE` or 
 
 All `/api/*` routes need a valid Entra bearer token (except `GET /api/auth/config`, the sign-in bootstrap).
 
-| Route                                 | Who                | Purpose                                                                                                  |
-| ------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------- |
-| `GET /api/me`, `GET /api/schema`      | any signed-in user | Current user; field definitions                                                                          |
-| `POST /api/requests`                  | any signed-in user | Submit a request                                                                                         |
-| `GET /api/admin/requests`             | admin              | List all requests                                                                                        |
-| `PATCH /api/admin/requests/:id`       | admin              | Update one or more fields of a request. `409` if it kept changing under you (reload and retry)           |
-| `GET`, `PUT /api/admin/prefs`         | admin              | Your column order (and, on GET, your saved filters)                                                      |
-| `POST /api/admin/saved-filters`       | admin              | Save a filter set (`{ name, filters, search }`); the same name replaces it. Returns the list             |
-| `DELETE /api/admin/saved-filters/:id` | admin              | Delete one of your saved filters. Returns the list                                                       |
-| `GET /api/admin/audit-log`            | admin              | Audit entries, newest first: `?limit=` (1-200, default 50) and `?cursor=` from the previous `nextCursor` |
-| `GET /healthz`                        | public             | Liveness                                                                                                 |
+| Route                                 | Who                | Purpose                                                                                                                                                                                                                          |
+| ------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/me`, `GET /api/schema`      | any signed-in user | Current user; field definitions                                                                                                                                                                                                  |
+| `POST /api/requests`                  | any signed-in user | Submit a request                                                                                                                                                                                                                 |
+| `GET /api/admin/requests`             | admin              | List all requests                                                                                                                                                                                                                |
+| `PATCH /api/admin/requests/:id`       | admin              | Update fields of a request. `{ "isDeleted": "Yes" }` soft-deletes and `{ "isDeleted": "No" }` restores. `409` if it kept changing under you (reload and retry), or if the request is deleted (only an exact restore is accepted) |
+| `GET`, `PUT /api/admin/prefs`         | admin              | Your column order (and, on GET, your saved filters)                                                                                                                                                                              |
+| `POST /api/admin/saved-filters`       | admin              | Save a filter set (`{ name, filters, search }`); the same name replaces it. Returns the list                                                                                                                                     |
+| `DELETE /api/admin/saved-filters/:id` | admin              | Delete one of your saved filters. Returns the list                                                                                                                                                                               |
+| `GET /api/admin/audit-log`            | admin              | Audit entries, newest first: `?limit=` (1-200, default 50) and `?cursor=` from the previous `nextCursor`                                                                                                                         |
+| `GET /healthz`                        | public             | Liveness                                                                                                                                                                                                                         |
 
 ## Known gaps
 
@@ -324,7 +338,11 @@ All `/api/*` routes need a valid Entra bearer token (except `GET /api/auth/confi
   tests: the admin and audit pages were checked by hand. Verify each deploy in non-prod ([Verify](#3-verify)).
 - Two admins editing the _same field_ at once: the later save wins, but the audit log records exactly what was
   replaced. Editing different fields of the same record never conflicts.
+- Saved filters and column order live in one per-admin record that is saved last-write-wins. If the _same admin_
+  saves from two tabs at the same moment, one save can overwrite the other, and the audit log then shows the save
+  that was attempted (not necessarily the one that survived). Request edits, deletes and restores are not affected.
 - The audit log has no search, filter or export, only newest-first paging. Column-order changes are not logged, and
   neither are rows loaded by the seed script.
-- No delete/archive of requests; set Status to `Closed Not Needed` instead.
+- Delete is soft only: there is no hard delete or purge, and no bulk delete. Deleted requests stay in the table
+  (hidden by the default filter) and count toward the Project ID sequence.
 - Any admin can read the whole audit log, including other admins' saved-filter names.

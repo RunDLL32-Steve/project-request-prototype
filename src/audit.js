@@ -4,6 +4,8 @@ import { randomUUID } from "node:crypto";
 export const AUDIT_ACTIONS = {
     requestCreated: "request.created",
     requestUpdated: "request.updated",
+    requestDeleted: "request.deleted",
+    requestRestored: "request.restored",
     savedFilterSaved: "savedFilter.saved",
     savedFilterDeleted: "savedFilter.deleted",
 };
@@ -41,6 +43,21 @@ export function diffChanges(row, changes) {
         }
     }
     return diffs;
+}
+
+/**
+ * The audit entry for one changed field of a request. Flipping Is Deleted? is logged as a
+ * delete or a restore rather than as a generic edit.
+ */
+export function buildRequestChangeEntry(actor, projectId, diff) {
+    let action = AUDIT_ACTIONS.requestUpdated;
+    if (diff.field === "isDeleted") {
+        action =
+            diff.newValue === "Yes"
+                ? AUDIT_ACTIONS.requestDeleted
+                : AUDIT_ACTIONS.requestRestored;
+    }
+    return buildAuditEntry(actor, action, { projectId, ...diff });
 }
 
 /** An entry as sent to the browser: storage-only keys removed. */
