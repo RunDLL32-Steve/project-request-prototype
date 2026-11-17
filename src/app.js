@@ -1,7 +1,9 @@
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { createAuth } from "./auth.js";
+import { validateSavedFilter, MAX_SAVED } from "./saved-filters.js";
 import { FIELDS, FIELD_BY_KEY, SUBMITTER_KEYS, coerce } from "./schema.js";
 
 const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "public");
@@ -104,7 +106,7 @@ export function createApp({ config, store, mailer, log = console }) {
   app.get("/api/admin/prefs", auth.requireAdmin, async (req, res, next) => {
     try {
       const p = await store.getPrefs(req.user.id);
-      res.json({ columnOrder: p?.columnOrder || null });
+      res.json({ columnOrder: p?.columnOrder || null, savedFilters: p?.savedFilters || [] });
     } catch (e) {
       next(e);
     }
@@ -121,8 +123,41 @@ export function createApp({ config, store, mailer, log = console }) {
           order.every((k) => typeof k === "string" && FIELD_BY_KEY[k]);
         if (!ok) return res.status(400).json({ error: "columnOrder must be a list of unique, valid field keys (or null to reset)" });
       }
-      await store.setPrefs(req.user.id, { columnOrder: order, email: req.user.email });
+      // Merge into the existing record so saved filters survive a column-order save.
+      const existing = (await store.getPrefs(req.user.id)) || {};
+      await store.setPrefs(req.user.id, { ...existing, columnOrder: order, email: req.user.email });
       res.json({ columnOrder: order });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // Saved filters: named filter sets per admin, for quick switching between views.
+  app.post("/api/admin/saved-filters", auth.requireAdmin, async (req, res, next) => {
+    try {
+      const v = validateSavedFilter(req.body);
+      if (v.error) return res.status(400).json({ error: v.error });
+      const existing = (await store.getPrefs(req.user.id)) || {};
+      const list = [...(existing.savedFilters || [])];
+      const i = list.findIndex((s) => s.name.toLowerCase() === v.value.name.toLowerCase());
+      if (i >= 0) list[i] = { ...v.value, id: list[i].id };
+      else if (list.length >= MAX_SAVED) return res.status(400).json({ error: `You can save at most ${MAX_SAVED} filters; delete one first` });
+      else list.push({ ...v.value, id: randomUUID() });
+      await store.setPrefs(req.user.id, { ...existing, savedFilters: list, email: req.user.email });
+      res.json({ savedFilters: list });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.delete("/api/admin/saved-filters/:id", auth.requireAdmin, async (req, res, next) => {
+    try {
+      const existing = (await store.getPrefs(req.user.id)) || {};
+      const before = existing.savedFilters || [];
+      const list = before.filter((s) => s.id !== req.params.id);
+      if (list.length === before.length) return res.status(404).json({ error: "Saved filter not found" });
+      await store.setPrefs(req.user.id, { ...existing, savedFilters: list, email: req.user.email });
+      res.json({ savedFilters: list });
     } catch (e) {
       next(e);
     }

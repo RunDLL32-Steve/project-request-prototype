@@ -19,6 +19,10 @@
     <div class="toolbar">
       <input id="search" type="search" placeholder="Filter rows…" aria-label="Filter rows">
       <button type="button" id="filtersBtn" class="btn-secondary" aria-expanded="false" aria-controls="filterPanel">Filters</button>
+      <span class="saved-wrap">
+        <button type="button" id="savedBtn" class="btn-secondary" aria-expanded="false" aria-haspopup="true" aria-controls="savedPop">Saved filters</button>
+        <div id="savedPop" class="saved-pop" hidden></div>
+      </span>
       <button type="button" id="clearBtn" class="btn-link" hidden>Clear all</button>
       <label class="toggle"><input type="checkbox" id="allCols"> All columns</label>
       <button type="button" id="resetColsBtn" class="btn-link" hidden>Reset column order</button>
@@ -52,6 +56,8 @@
     const filtersBtn = document.getElementById("filtersBtn");
     const clearBtn = document.getElementById("clearBtn");
     const filterPanel = document.getElementById("filterPanel");
+    const savedBtn = document.getElementById("savedBtn");
+    const savedPop = document.getElementById("savedPop");
     const pager = document.getElementById("pager");
     const allCols = document.getElementById("allCols");
     const resetColsBtn = document.getElementById("resetColsBtn");
@@ -72,7 +78,10 @@
     ];
 
     let fields = [], byKey = {}, rows = [], sortKey = "projectId", sortDir = 1, openId = null;
-    let filters = {}; // key -> { text } | { eq } | { from, to }
+    let filters = {}; // key -> { text } | { in: [values] } | { from, to }
+    let savedFilters = []; // this admin's saved views: [{ id, name, filters, search }]
+    let syncSaveBtn = () => {};
+    let resetters = []; // one reset() per multi-select widget, called by clearAll()
     let order = [];   // field keys in the admin's preferred column order (saved per admin)
     let defaultOrder = [];
     let dragKey = null;
@@ -126,6 +135,7 @@
     function setFilter(key, patch) {
       const next = { ...(filters[key] || {}), ...patch };
       for (const k of Object.keys(next)) if (next[k] === "" || next[k] === undefined) delete next[k];
+      if (Array.isArray(next.in) && !next.in.length) delete next.in;
       if (Object.keys(next).length) filters[key] = next; else delete filters[key];
       page = 1;
       render();
@@ -137,8 +147,8 @@
         const f = byKey[key], v = row[key];
         if (fv.text !== undefined) {
           if (!String(v ?? "").toLowerCase().includes(fv.text.toLowerCase())) return false;
-        } else if (fv.eq !== undefined) {
-          if (String(v ?? "") !== fv.eq) return false;
+        } else if (fv.in !== undefined) {
+          if (!fv.in.includes(String(v ?? ""))) return false;
         } else {
           if (v === null || v === undefined || v === "") return false;
           const conv = (x) => (isNum(f) ? Number(x) : String(x));
@@ -149,7 +159,141 @@
       return true;
     }
 
+    // Multi-select dropdown: stays open while ticking, chips for picks, search box, picks are OR'd.
+    function closeAllPops() {
+      document.querySelectorAll(".msel-pop:not([hidden])").forEach((p) => {
+        p.hidden = true;
+        p.previousElementSibling.setAttribute("aria-expanded", "false");
+      });
+    }
+    document.addEventListener("click", (e) => { if (!e.target.closest(".msel")) closeAllPops(); });
+    filterPanel.addEventListener("scroll", closeAllPops);
+    window.addEventListener("resize", closeAllPops);
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const open = document.querySelector(".msel-pop:not([hidden])");
+      if (!open) return;
+      const box = open.previousElementSibling;
+      closeAllPops();
+      box.focus();
+    });
+
+    function buildMultiSelect(f) {
+      const selected = new Set();
+      const wrap = document.createElement("div");
+      wrap.className = "msel";
+      const box = document.createElement("button");
+      box.type = "button";
+      box.className = "msel-box";
+      box.setAttribute("aria-haspopup", "listbox");
+      box.setAttribute("aria-expanded", "false");
+      const pop = document.createElement("div");
+      pop.className = "msel-pop";
+      pop.hidden = true;
+      const find = document.createElement("input");
+      find.type = "search";
+      find.placeholder = "Search…";
+      find.setAttribute("aria-label", "Search " + f.label);
+      const list = document.createElement("div");
+      list.className = "msel-list";
+      const none = document.createElement("div");
+      none.className = "msel-none";
+      none.textContent = "No matches";
+      none.hidden = true;
+      const items = f.options.map((o) => {
+        const label = document.createElement("label");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.value = o;
+        const span = document.createElement("span");
+        span.textContent = o;
+        label.append(cb, span);
+        cb.addEventListener("change", () => {
+          if (cb.checked) selected.add(o); else selected.delete(o);
+          find.value = "";
+          applySearch();
+          update();
+        });
+        return { o, label, cb };
+      });
+      list.append(...items.map((i) => i.label), none);
+      find.addEventListener("input", applySearch);
+      pop.append(find, list);
+      wrap.append(box, pop);
+
+      function applySearch() {
+        const q = find.value.trim().toLowerCase();
+        let shown = 0;
+        for (const i of items) {
+          const hit = !q || i.o.toLowerCase().includes(q);
+          i.label.hidden = !hit;
+          if (hit) shown++;
+        }
+        none.hidden = shown > 0;
+      }
+      function update() {
+        paint();
+        setFilter(f.key, { in: [...selected] });
+      }
+      // Set the selection from saved state without touching `filters` (the caller owns that).
+      function set(values) {
+        selected.clear();
+        for (const o of f.options) if (values.includes(o)) selected.add(o);
+        items.forEach((i) => (i.cb.checked = selected.has(i.o)));
+        paint();
+      }
+      function paint() {
+        box.replaceChildren();
+        if (!selected.size) {
+          box.textContent = "Any";
+        } else {
+          for (const o of selected) {
+            const chip = document.createElement("span");
+            chip.className = "msel-chip";
+            chip.append(document.createTextNode(o + " "));
+            const x = document.createElement("span");
+            x.className = "msel-x";
+            x.textContent = "×";
+            x.setAttribute("aria-hidden", "true");
+            chip.append(x);
+            box.append(chip);
+          }
+        }
+        box.setAttribute("aria-label", f.label + ": " + (selected.size ? [...selected].join(", ") : "Any"));
+      }
+      function place() {
+        const r = box.getBoundingClientRect();
+        pop.style.left = r.left + "px";
+        pop.style.top = r.bottom + 2 + "px";
+        pop.style.minWidth = r.width + "px";
+      }
+      box.addEventListener("click", () => {
+        const opening = pop.hidden;
+        closeAllPops();
+        if (opening) {
+          pop.hidden = false;
+          box.setAttribute("aria-expanded", "true");
+          place();
+          find.focus();
+        }
+      });
+      function reset() {
+        selected.clear();
+        items.forEach((i) => (i.cb.checked = false));
+        find.value = "";
+        applySearch();
+        box.replaceChildren();
+        box.textContent = "Any";
+        box.setAttribute("aria-label", f.label + ": Any");
+        closeAllPops();
+      }
+      box.textContent = "Any";
+      box.setAttribute("aria-label", f.label + ": Any");
+      return { el: wrap, reset, set };
+    }
+
     function buildFilterPanel() {
+      resetters = [];
       filterPanel.replaceChildren();
       const grid = document.createElement("div");
       grid.className = "fgrid";
@@ -161,10 +305,10 @@
         wrap.append(label);
         const mk = (type) => { const i = document.createElement("input"); i.type = type; return i; };
         if (f.type === "select") {
-          const sel = document.createElement("select");
-          sel.append(new Option("Any", ""), ...f.options.map((o) => new Option(o, o)));
-          sel.addEventListener("change", () => setFilter(f.key, { eq: sel.value }));
-          wrap.append(sel);
+          const ms = buildMultiSelect(f);
+          ms.set((filters[f.key] || {}).in || []);
+          resetters.push(ms.reset);
+          wrap.append(ms.el);
         } else if (f.type === "date" || isNum(f)) {
           const range = document.createElement("div");
           range.className = "frange";
@@ -173,6 +317,7 @@
             i.placeholder = ph;
             i.setAttribute("aria-label", f.label + " " + ph.toLowerCase());
             if (f.type === "money") i.step = "0.01";
+            i.value = (filters[f.key] || {})[part] || "";
             i.addEventListener("input", () => setFilter(f.key, { [part]: i.value }));
             range.append(f.type === "date" ? dateField(i) : i);
           }
@@ -180,6 +325,7 @@
         } else {
           const i = mk("text");
           i.placeholder = "Contains…";
+          i.value = (filters[f.key] || {}).text || "";
           i.addEventListener("input", () => setFilter(f.key, { text: i.value }));
           wrap.append(i);
         }
@@ -188,11 +334,115 @@
       filterPanel.append(grid);
     }
 
+    // ---- Saved filters (per user, for quick switching between views; never applied on load) ----
+    function hasActiveFilters() { return Object.keys(filters).length > 0 || search.value.trim() !== ""; }
+
+    function closeSaved() {
+      savedPop.hidden = true;
+      savedBtn.setAttribute("aria-expanded", "false");
+    }
+
+    function applySaved(sf) {
+      filters = JSON.parse(JSON.stringify(sf.filters || {}));
+      search.value = sf.search || "";
+      page = 1;
+      buildFilterPanel(); // controls are hydrated from `filters`
+      render();
+      closeSaved();
+    }
+
+    async function saveCurrent(nameInput) {
+      const name = nameInput.value.trim();
+      if (!name || !hasActiveFilters()) return;
+      const existing = savedFilters.find((s) => s.name.toLowerCase() === name.toLowerCase());
+      if (existing && !confirm('Replace the saved filter "' + existing.name + '"?')) return;
+      try {
+        const r = await api("/api/admin/saved-filters", { method: "POST", body: { name, filters, search: search.value.trim() } });
+        savedFilters = r.savedFilters;
+        document.getElementById("saveState").textContent = 'Saved filter "' + name + '".';
+        clearFail();
+        renderSaved();
+      } catch (e) {
+        fail("Could not save filter: " + e.message);
+      }
+    }
+
+    async function deleteSaved(sf) {
+      if (!confirm('Delete the saved filter "' + sf.name + '"?')) return;
+      try {
+        const r = await api("/api/admin/saved-filters/" + encodeURIComponent(sf.id), { method: "DELETE" });
+        savedFilters = r.savedFilters;
+        clearFail();
+        renderSaved();
+      } catch (e) {
+        fail("Could not delete filter: " + e.message);
+      }
+    }
+
+    function renderSaved() {
+      savedPop.replaceChildren();
+      const list = document.createElement("ul");
+      list.className = "saved-list";
+      if (!savedFilters.length) {
+        const li = document.createElement("li");
+        li.className = "saved-empty";
+        li.textContent = "No saved filters yet.";
+        list.append(li);
+      }
+      for (const sf of savedFilters) {
+        const li = document.createElement("li");
+        const apply = document.createElement("button");
+        apply.type = "button";
+        apply.className = "saved-apply";
+        apply.textContent = sf.name;
+        apply.addEventListener("click", () => applySaved(sf));
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "saved-del";
+        del.textContent = "×";
+        del.setAttribute("aria-label", "Delete saved filter " + sf.name);
+        del.addEventListener("click", () => deleteSaved(sf));
+        li.append(apply, del);
+        list.append(li);
+      }
+      const form = document.createElement("form");
+      form.className = "saved-form";
+      const name = document.createElement("input");
+      name.type = "text";
+      name.maxLength = 60;
+      name.placeholder = "Name this view";
+      name.setAttribute("aria-label", "Name for the saved filter");
+      const save = document.createElement("button");
+      save.type = "submit";
+      save.textContent = "Save";
+      const sync = () => {
+        const ok = hasActiveFilters();
+        save.disabled = !ok || !name.value.trim();
+        save.title = !ok ? "Set a filter or search first" : !name.value.trim() ? "Enter a name for this view" : "";
+        name.title = ok ? "" : "Set a filter or search first";
+      };
+      syncSaveBtn = sync; // render() calls this so Save tracks filter changes while the popover is open
+      name.addEventListener("input", sync);
+      form.addEventListener("submit", (e) => { e.preventDefault(); saveCurrent(name); });
+      sync();
+      form.append(name, save);
+      savedPop.append(list, form);
+    }
+
+    savedBtn.addEventListener("click", () => {
+      const opening = savedPop.hidden;
+      if (opening) renderSaved();
+      savedPop.hidden = !opening;
+      savedBtn.setAttribute("aria-expanded", String(opening));
+    });
+    document.addEventListener("click", (e) => { if (!e.target.closest(".saved-wrap")) closeSaved(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !savedPop.hidden) { closeSaved(); savedBtn.focus(); } });
+
     function clearAll() {
       filters = {};
       search.value = "";
-      filterPanel.querySelectorAll("input").forEach((i) => (i.value = ""));
-      filterPanel.querySelectorAll("select").forEach((s) => (s.value = ""));
+      filterPanel.querySelectorAll("input:not([type=checkbox])").forEach((i) => (i.value = ""));
+      resetters.forEach((r) => r());
       page = 1;
       render();
     }
@@ -254,6 +504,7 @@
       const activeCount = Object.keys(filters).length;
       filtersBtn.textContent = activeCount ? "Filters (" + activeCount + ")" : "Filters";
       clearBtn.hidden = !activeCount && !q;
+      syncSaveBtn();
       view.sort((a, b) => {
         const x = a[sortKey] ?? "", y = b[sortKey] ?? "";
         return (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y))) * sortDir;
@@ -430,6 +681,7 @@
       try {
         const prefs = await api("/api/admin/prefs");
         order = normalizeOrder(prefs.columnOrder);
+        savedFilters = prefs.savedFilters || [];
       } catch (e) {
         fail("Could not load your saved column order (using default): " + e.message);
       }
